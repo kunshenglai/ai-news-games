@@ -58,7 +58,6 @@
     'use strict';
     console.log('[GAME] Script starting');
 
-    // 变量声明
     var bgCanvas = document.getElementById('bg-canvas');
     var ctx = bgCanvas.getContext('2d', { alpha: false });
     var W = 0, H = 0, SCALE = 1;
@@ -72,7 +71,6 @@
     var threats = [];
     var screenShake = { intensity: 0, timer: 0 };
 
-    // DOM 元素
     var startBtn = document.getElementById('start-btn');
     var startScreen = document.getElementById('start-screen');
     var gameOverScreen = document.getElementById('game-over');
@@ -82,10 +80,9 @@
     var versionEl = document.getElementById('version');
 
     function setVersion(msg) {
-      if (versionEl) versionEl.textContent = 'v5.0.0 - ' + msg;
+      if (versionEl) versionEl.textContent = 'v5.0.1 - ' + msg;
     }
 
-    // Canvas 尺寸设置
     function resize() {
       var dpr = window.devicePixelRatio || 1;
       W = window.innerWidth;
@@ -94,12 +91,11 @@
       bgCanvas.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       SCALE = Math.min(W / 375, 1.1);
-      console.log('[GAME] Resize: ' + W + 'x' + H);
+      if (app) app.renderer.resize(W, H);
     }
     window.addEventListener('resize', resize);
     resize();
 
-    // 配置
     var CONFIG = {
       gameDuration: 45,
       spawnRate: { base: 1.2, max: 4.0, curve: 1.8 },
@@ -114,22 +110,17 @@
     var THREAT_COLORS = ['#CC2200', '#DD4400', '#EE6600', '#AA0000', '#DD8800'];
     var PALETTE = { building: '#1a1218', buildingLight: '#2a2028' };
 
-    // 初始化 PixiJS
     if (typeof PIXI !== 'undefined') {
       try {
-        console.log('[GAME] PixiJS version: ' + PIXI.VERSION);
         app = new PIXI.Application({
-          width: W,
-          height: H,
+          width: W, height: H,
           resolution: window.devicePixelRatio || 1,
           autoDensity: true,
-          backgroundAlpha: 0,
-          antialias: true
+          backgroundAlpha: 0, antialias: true
         });
         document.getElementById('pixi-container').appendChild(app.view);
         setVersion('PixiJS Ready');
 
-        // 创建粒子纹理
         function makeTex(r, g, b) {
           var c = document.createElement('canvas');
           c.width = 64; c.height = 64;
@@ -138,24 +129,16 @@
           grad.addColorStop(0, 'rgba(255,255,255,1)');
           grad.addColorStop(0.3, 'rgba(' + r + ',' + g + ',' + b + ',0.9)');
           grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
-          x.fillStyle = grad;
-          x.fillRect(0, 0, 64, 64);
+          x.fillStyle = grad; x.fillRect(0, 0, 64, 64);
           return PIXI.Texture.from(c);
         }
         particleTextures.fire = makeTex(255, 100, 30);
         particleTextures.spark = makeTex(255, 255, 200);
         particleTextures.smoke = makeTex(80, 80, 80);
-        console.log('[GAME] Textures created');
-      } catch (e) {
-        console.error('[GAME] Pixi init error: ' + e.message);
-        setVersion('Pixi Error: ' + e.message);
-      }
-    } else {
-      console.error('[GAME] PixiJS NOT loaded');
-      setVersion('PixiJS CDN Failed');
-    }
+        particleTextures.debris = makeTex(200, 50, 0);
+      } catch (e) { setVersion('Pixi Error'); }
+    } else { setVersion('PixiJS CDN Failed'); }
 
-    // 粒子类
     function Particle(x, y, vx, vy, life, key, size) {
       this.x = x; this.y = y; this.vx = vx; this.vy = vy;
       this.life = life; this.maxLife = life; this.size = size;
@@ -185,33 +168,51 @@
     };
 
     function emitParticle(x, y, vx, vy, life, key, size) {
-      if (app && particles.length < 1500) particles.push(new Particle(x, y, vx, vy, life, key, size));
+      if (app && particles.length < 2000) particles.push(new Particle(x, y, vx, vy, life, key, size));
     }
 
     function emitExplosion(x, y, color) {
       if (!app) return;
-      console.log('[GAME] Explosion at ' + x.toFixed(0) + ',' + y.toFixed(0));
       emitParticle(x, y, 0, 0, 0.1, 'spark', 25);
       for (var i = 0; i < 40; i++) {
-        var a = Math.random() * Math.PI * 2;
-        var sp = (2 + Math.random() * 6) * SCALE;
+        var a = Math.random() * Math.PI * 2; var sp = (2 + Math.random() * 6) * SCALE;
         emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.5 + Math.random()*0.4, 'fire', 6 + Math.random()*10);
       }
-      for (var i = 0; i < 12; i++) {
-        var a = Math.random() * Math.PI * 2;
-        var sp = (1 + Math.random() * 2) * SCALE;
-        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 1, 1.0, 'smoke', 12 + Math.random()*8);
-      }
-      // 闪光
-      var flash = new PIXI.Graphics();
-      flash.beginFill(0xFFFFFF);
-      flash.drawRect(0, 0, W, H);
-      flash.alpha = 0.3;
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
+      flash.drawRect(0, 0, W, H); flash.alpha = 0.3;
       app.stage.addChild(flash);
-      setTimeout(function() { app.stage.removeChild(flash); flash.destroy(); }, 50);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 50);
     }
 
-    // 威胁物
+    // 修复：添加落地爆炸效果
+    function emitFailExplosion(x, y) {
+      if (!app) return;
+      console.log('[GAME] Fail Explosion at ' + x.toFixed(0) + ',' + y.toFixed(0));
+      // 1. 大量火花 (快速)
+      for (var i = 0; i < 50; i++) {
+        var a = Math.random() * Math.PI * 2; 
+        var sp = (5 + Math.random() * 10) * SCALE; 
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 3, 0.8 + Math.random()*0.4, 'spark', 4 + Math.random()*4);
+      }
+      // 2. 碎片 (中等速度)
+      for (var i = 0; i < 30; i++) {
+        var a = Math.random() * Math.PI * 2; 
+        var sp = (2 + Math.random() * 5) * SCALE; 
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 1.0, 'debris', 8 + Math.random()*8);
+      }
+      // 3. 烟雾 (慢速上升)
+      for (var i = 0; i < 15; i++) {
+        var a = Math.random() * Math.PI * 2; 
+        var sp = (1 + Math.random() * 2) * SCALE; 
+        emitParticle(x, y, Math.cos(a)*sp, -1 - Math.random()*2, 1.5, 'smoke', 10 + Math.random()*10);
+      }
+      // 4. 红色闪光
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFF0000);
+      flash.drawRect(0, 0, W, H); flash.alpha = 0.5;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 100);
+    }
+
     function Threat(x, y, type, id) {
       this.x = x; this.y = y; this.type = type % 6; this.id = id;
       this.radius = (18 + Math.random() * 8) * SCALE;
@@ -257,7 +258,6 @@
 
     function drawBackground(c) {
       c.fillStyle = '#0a0510'; c.fillRect(0, 0, W, H);
-      // 白宫
       var bw = W * 0.75, bh = H * 0.14;
       var bx = (W - bw) / 2, by = H * 0.82;
       c.fillStyle = PALETTE.building; c.fillRect(bx, by, bw, bh);
@@ -297,7 +297,6 @@
           var cm = 1 + Math.min(combo * CONFIG.comboMultiplier, CONFIG.maxCombo - 1);
           score += Math.round(CONFIG.tapScore * cm);
           var pos = t.position();
-          console.log('[GAME] Hit! Score=' + score);
           emitExplosion(pos.x, pos.y, t.color);
           comboEl.textContent = combo >= 2 ? '🔥 ' + combo + '连击' : '';
           scoreEl.textContent = score;
@@ -332,12 +331,9 @@
       }
       threatId = 0; spawnTimer = 0;
       scoreEl.textContent = '0'; comboEl.textContent = '';
-      console.log('[GAME] Restarted');
     }
 
-    // 事件绑定
     startBtn.addEventListener('click', function(e) {
-      console.log('[GAME] Start clicked');
       e.preventDefault(); e.stopPropagation();
       gameStarted = true; restartGame();
     });
@@ -356,7 +352,6 @@
       handleTap(e.clientX, e.clientY);
     });
 
-    // 游戏循环
     var lastTime = 0;
     function loop(ts) {
       var dt = Math.min((ts - lastTime) / 16.67, 3);
@@ -374,6 +369,9 @@
           if (t.update(dt) && Math.random() < 0.02 * dt) {
             t.alive = false; missed++; combo = 0;
             comboEl.textContent = '';
+            // 修复：调用落地爆炸效果
+            var pos = t.position();
+            emitFailExplosion(pos.x, pos.y);
             if (missed >= CONFIG.missLimit) gameOver();
           }
         }
@@ -383,24 +381,16 @@
         if (rem <= 0) gameOver();
       }
 
-      // 更新粒子
       if (app) {
         for (var i = particles.length - 1; i >= 0; i--) {
           if (!particles[i].update(dt)) particles.splice(i, 1);
         }
       }
 
-      if (screenShake.timer > 0) screenShake.timer -= dt / 60;
-
-      // 渲染背景
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
       ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
-      if (screenShake.timer > 0) {
-        var s = screenShake.intensity * (screenShake.timer / 0.25);
-        ctx.translate((Math.random()-0.5)*s, (Math.random()-0.5)*s);
-      }
       drawBackground(ctx);
       for (var i = 0; i < threats.length; i++) {
         if (threats[i].alive) threats[i].render(ctx);
@@ -410,17 +400,8 @@
       requestAnimationFrame(loop);
     }
 
-    console.log('[GAME] Starting loop');
-    setVersion('Running - Frame: 0');
-    var frameCount = 0;
-    function loopWithDebug(ts) {
-      frameCount++;
-      if (frameCount % 60 === 0 && versionEl) {
-        versionEl.textContent = 'v5.0.0 - Frame:' + frameCount + ' Threats:' + threats.length;
-      }
-      loop(ts);
-    }
-    requestAnimationFrame(loopWithDebug);
+    setVersion('Running');
+    requestAnimationFrame(loop);
   })();
   </script>
 </body>
