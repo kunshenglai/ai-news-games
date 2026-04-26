@@ -135,12 +135,14 @@
         this.rotation = Math.random() * Math.PI * 2;
         this.rotSpeed = (Math.random() - 0.5) * 0.4;
         this.alpha = 1;
+        this.flicker = Math.random() > 0.7;
       }
       update(dt) {
         this.vy += 0.2 * dt; this.vx *= 0.98; this.vy *= 0.98;
         this.x += this.vx * dt; this.y += this.vy * dt;
         this.life -= dt; this.rotation += this.rotSpeed * dt;
         this.alpha = Math.max(0, this.life / this.maxLife);
+        if (this.flicker) this.alpha *= 0.5 + Math.random() * 0.5;
         return this.life > 0;
       }
       render(ctx) {
@@ -173,6 +175,26 @@
         } else if (this.type === 'confetti') {
           ctx.fillStyle = this.color;
           ctx.fillRect(-s, -s * 0.25, s * 2, s * 0.5);
+        } else if (this.type === 'lightning') {
+          ctx.strokeStyle = this.color; ctx.lineWidth = 2; ctx.shadowColor = this.color; ctx.shadowBlur = 6;
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const lx = (Math.random() - 0.5) * s * 2;
+            const ly = (Math.random() - 0.5) * s * 2;
+            i === 0 ? ctx.moveTo(lx, ly) : ctx.lineTo(lx, ly);
+          }
+          ctx.stroke();
+        } else if (this.type === 'ember') {
+          ctx.fillStyle = this.color; ctx.shadowColor = this.color; ctx.shadowBlur = s * 2;
+          ctx.beginPath(); ctx.arc(0, 0, s * 0.6, 0, Math.PI * 2); ctx.fill();
+          // 拖尾
+          ctx.globalAlpha *= 0.3;
+          ctx.beginPath(); ctx.arc(-this.vx * 0.5, -this.vy * 0.5, s * 0.4, 0, Math.PI * 2); ctx.fill();
+        } else if (this.type === 'plasma') {
+          const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, s);
+          grad.addColorStop(0, '#FFF'); grad.addColorStop(0.3, this.color); grad.addColorStop(1, 'transparent');
+          ctx.fillStyle = grad;
+          ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill();
         } else {
           ctx.fillStyle = this.color; ctx.shadowColor = this.color; ctx.shadowBlur = s;
           ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill();
@@ -241,6 +263,51 @@
       }
     }
 
+    // 漏掉时的毁灭爆炸
+    function emitFailExplosion(x, y) {
+      // 1. 深红色等离子核心
+      for (let i = 0; i < 40; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = (0.5 + Math.random() * 4) * SCALE;
+        particles.push(new Particle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.8 + Math.random()*0.8,
+          '#FF0044', 4 + Math.random()*6, 'plasma'));
+      }
+      // 2. 暗色碎片（更多）
+      for (let i = 0; i < 25; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = (1 + Math.random() * 5) * SCALE;
+        particles.push(new Particle(x, y, Math.cos(a)*sp, Math.sin(a)*sp + 2,
+          1.0 + Math.random()*0.5, '#1a0500', 3 + Math.random()*4, 'debris'));
+      }
+      // 3. 红色闪电
+      for (let i = 0; i < 15; i++) {
+        const ox = (Math.random() - 0.5) * 30 * SCALE;
+        const oy = (Math.random() - 0.5) * 30 * SCALE;
+        particles.push(new Particle(x + ox, y + oy, 0, 0,
+          0.3 + Math.random()*0.3, '#FF2200', 8 + Math.random()*5, 'lightning'));
+      }
+      // 4. 余烬（带拖尾）
+      for (let i = 0; i < 20; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = (1 + Math.random() * 3) * SCALE;
+        particles.push(new Particle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 1,
+          1.0 + Math.random(), '#FF8800', 2 + Math.random()*3, 'ember'));
+      }
+      // 5. 浓重黑烟
+      for (let i = 0; i < 8; i++) {
+        particles.push(new Particle(x + (Math.random()-0.5)*40, y + (Math.random()-0.5)*40,
+          (Math.random()-0.5)*0.5, -1 - Math.random(), 1.5 + Math.random(), '#222', 8 + Math.random()*8, 'smoke'));
+      }
+      // 6. 双重冲击波
+      particles.push(new Particle(x, y, 0, 0, 0.5, '#FF0044', 12, 'ring'));
+      setTimeout(() => particles.push(new Particle(x, y, 0, 0, 0.4, '#FF6600', 8, 'ring')), 100);
+      
+      // 7. 屏幕闪烁
+      screenFlash.intensity = 1.0;
+      screenFlash.color = 'rgba(255, 0, 34, 0.6)';
+      screenFlash.duration = 0.3;
+    }
+
     function emitRipple(x, y) {
       particles.push(new Particle(x, y, 0, 0, 0.25, 'rgba(255,255,255,0.6)', 5, 'ring'));
     }
@@ -273,7 +340,7 @@
     class Threat {
       constructor(x, y, type, id) {
         this.x = x; this.y = y;
-        this.type = type % 6; // 6种不同类型
+        this.type = type % 6;
         this.id = id;
         this.radius = (18 + Math.random() * 8) * SCALE;
         this.targetX = x; this.targetY = H * 0.75 + Math.random() * (H * 0.15);
@@ -283,14 +350,12 @@
         this.wobble = Math.random() * Math.PI * 2;
         this.alive = true; this.time = Math.random() * 100;
         this.color = PALETTE.threat[this.type % PALETTE.threat.length];
-        this.innerColor = '#1a0500';
-        this.glowIntensity = 0.5;
+        this.pulsePhase = Math.random() * Math.PI * 2;
       }
       update(dt) {
         this.progress += this.speed * dt;
         this.time += 0.08 * dt;
         this.wobble += 0.06 * dt;
-        this.glowIntensity = 0.4 + Math.sin(this.time * 3) * 0.3;
         if (this.progress >= 1) { this.progress = 1; return true; }
         return false;
       }
@@ -305,48 +370,41 @@
       render(ctx) {
         const pos = this.position;
         const r = this.radius;
+        const pulse = 0.7 + Math.sin(this.time * 4 + this.pulsePhase) * 0.3;
         ctx.save();
         ctx.translate(pos.x, pos.y);
 
-        // 外部光晕
-        const glow = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 2.5);
-        glow.addColorStop(0, this.color + 'AA');
-        glow.addColorStop(0.4, this.color + '33');
+        // 外部光晕（脉冲）
+        const glow = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.5);
+        glow.addColorStop(0, this.color + 'CC');
+        glow.addColorStop(0.4, this.color + '44');
         glow.addColorStop(1, 'transparent');
         ctx.fillStyle = glow;
         ctx.beginPath(); ctx.arc(0, 0, r * 2.5, 0, Math.PI * 2); ctx.fill();
 
-        // 根据类型绘制不同形状
+        // 根据类型绘制
         switch (this.type) {
-          case 0: this.drawBomb(ctx, r); break;
+          case 0: this.drawBomb(ctx, r, pulse); break;
           case 1: this.drawMeteor(ctx, r); break;
           case 2: this.drawDrone(ctx, r); break;
-          case 3: this.drawSkull(ctx, r); break;
+          case 3: this.drawSkull(ctx, r, pulse); break;
           case 4: this.drawLightning(ctx, r); break;
           case 5: this.drawSpikeBall(ctx, r); break;
         }
 
         ctx.restore();
       }
-      drawBomb(ctx, r) {
-        // 炸弹造型
-        ctx.fillStyle = '#1a0a00'; ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+      drawBomb(ctx, r, pulse) {
+        ctx.fillStyle = '#1a0a00'; ctx.strokeStyle = this.color; ctx.lineWidth = 2 * pulse;
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        
-        // 引信
         ctx.strokeStyle = '#FF8800'; ctx.lineWidth = 3 * SCALE; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(0, -r); 
         ctx.quadraticCurveTo(r * 0.5, -r * 1.5, r * 0.3, -r * 1.8); ctx.stroke();
-        // 火花
         const sp = Math.sin(this.time * 20) * 2;
-        ctx.fillStyle = '#FFF';
+        ctx.fillStyle = '#FFF'; ctx.shadowColor = '#FFF'; ctx.shadowBlur = 5;
         ctx.beginPath(); ctx.arc(r * 0.3, -r * 1.8 + sp, 3 * SCALE, 0, Math.PI * 2); ctx.fill();
-        // 内部纹理
-        ctx.fillStyle = this.color + '44';
-        ctx.beginPath(); ctx.arc(-r*0.2, -r*0.2, r*0.3, 0, Math.PI*2); ctx.fill();
       }
       drawMeteor(ctx, r) {
-        // 陨石造型
         const rot = this.time * 2;
         ctx.rotate(rot);
         ctx.fillStyle = '#2a1000'; ctx.strokeStyle = this.color; ctx.lineWidth = 2;
@@ -358,61 +416,46 @@
           i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
         ctx.closePath(); ctx.fill(); ctx.stroke();
-        // 灼热核心
         ctx.fillStyle = this.color + '88';
         ctx.beginPath(); ctx.arc(0, 0, r * 0.4, 0, Math.PI * 2); ctx.fill();
       }
       drawDrone(ctx, r) {
-        // 无人机造型
         const bob = Math.sin(this.time * 15) * 2;
         ctx.fillStyle = '#0a1520'; ctx.strokeStyle = '#4488FF'; ctx.lineWidth = 2;
-        // 主体
         ctx.beginPath(); ctx.arc(0, bob, r * 0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        // 旋翼
         ctx.strokeStyle = '#88BBFF'; ctx.lineWidth = 2;
         for (let i = 0; i < 4; i++) {
           const a = (Math.PI / 2) * i + this.time * 10;
-          ctx.beginPath(); 
-          ctx.moveTo(0, bob);
-          ctx.lineTo(Math.cos(a) * r * 1.2, bob + Math.sin(a) * r * 0.2);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, bob);
+          ctx.lineTo(Math.cos(a) * r * 1.2, bob + Math.sin(a) * r * 0.2); ctx.stroke();
         }
-        // 红点
-        ctx.fillStyle = '#FF2200';
+        ctx.fillStyle = '#FF2200'; ctx.shadowColor = '#FF2200'; ctx.shadowBlur = 8;
         ctx.beginPath(); ctx.arc(0, bob, 3 * SCALE, 0, Math.PI * 2); ctx.fill();
       }
-      drawSkull(ctx, r) {
-        // 骷髅头
-        ctx.fillStyle = '#2a2a2a'; ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+      drawSkull(ctx, r, pulse) {
+        ctx.fillStyle = '#2a2a2a'; ctx.strokeStyle = this.color; ctx.lineWidth = 2 * pulse;
         ctx.beginPath(); ctx.arc(0, -r * 0.1, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        // 眼窝
         ctx.fillStyle = '#000';
         ctx.beginPath(); ctx.arc(-r * 0.35, -r * 0.2, r * 0.25, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(r * 0.35, -r * 0.2, r * 0.25, 0, Math.PI * 2); ctx.fill();
-        // 下巴
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(-r * 0.4, r * 0.3, r * 0.8, r * 0.6);
-        // 牙齿
         ctx.fillStyle = '#444';
         for (let i = 0; i < 4; i++) {
           ctx.fillRect(-r * 0.35 + i * r * 0.2, r * 0.4, r * 0.12, r * 0.4);
         }
-        // 红光眼
-        ctx.fillStyle = '#FF2200'; ctx.shadowColor = '#FF2200'; ctx.shadowBlur = 10;
+        ctx.fillStyle = '#FF2200'; ctx.shadowColor = '#FF2200'; ctx.shadowBlur = 10 + pulse * 5;
         ctx.beginPath(); ctx.arc(-r * 0.35, -r * 0.2, r * 0.1, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(r * 0.35, -r * 0.2, r * 0.1, 0, Math.PI * 2); ctx.fill();
       }
       drawLightning(ctx, r) {
-        // 闪电球
         ctx.fillStyle = '#0a0520'; ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        // 闪电纹
         ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2 * SCALE; ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 5;
         ctx.beginPath();
         ctx.moveTo(-r * 0.3, -r * 0.6);
         ctx.lineTo(r * 0.1, -r * 0.1); ctx.lineTo(-r * 0.1, -r * 0.1);
         ctx.lineTo(r * 0.3, r * 0.6); ctx.stroke();
-        // 电弧
         ctx.strokeStyle = this.color + '66'; ctx.lineWidth = 1;
         for (let i = 0; i < 4; i++) {
           const a = (Math.PI / 2) * i + this.time * 5;
@@ -421,10 +464,8 @@
         }
       }
       drawSpikeBall(ctx, r) {
-        // 刺球
         ctx.fillStyle = '#1a0000'; ctx.strokeStyle = '#FF4400'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(0, 0, r * 0.7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        // 刺
         ctx.fillStyle = this.color;
         const rot = this.time * 3;
         for (let i = 0; i < 12; i++) {
@@ -449,17 +490,15 @@
     let gameTime = 0, gameActive = false, gameStarted = false;
     let threats = []; let threatId = 0; let spawnTimer = 0;
     let screenShake = { intensity: 0, timer: 0 };
+    let screenFlash = { intensity: 0, color: '', duration: 0, timer: 0 };
     
-    // 动态背景元素
     let clouds = [];
     for (let i = 0; i < 5; i++) {
       clouds.push({ x: Math.random() * 500, y: Math.random() * 200, w: 80 + Math.random() * 100, alpha: 0.05 + Math.random() * 0.05, speed: 0.1 + Math.random() * 0.2 });
     }
     let radarAngle = 0;
 
-    // === 背景绘制 ===
     function drawBackground(time) {
-      // 夜空渐变
       const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
       bgGrad.addColorStop(0, '#0a0510');
       bgGrad.addColorStop(0.5, '#1a0a15');
@@ -467,7 +506,6 @@
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // 云层移动
       clouds.forEach(c => {
         c.x += c.speed;
         if (c.x > W + c.w) c.x = -c.w;
@@ -477,7 +515,6 @@
         ctx.fill();
       });
 
-      // 雷达扫描线
       radarAngle += 0.01;
       ctx.strokeStyle = 'rgba(255, 68, 0, 0.15)'; ctx.lineWidth = 2;
       ctx.save(); ctx.translate(W * 0.85, H * 0.15);
@@ -493,47 +530,19 @@
     function drawWhiteHouse() {
       const bw = W * 0.75, bh = H * 0.14;
       const bx = (W - bw) / 2, by = H * 0.82;
-
       ctx.save();
-      // 建筑阴影
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(bx + 5, by + 5, bw, bh);
-
-      // 主体
-      ctx.fillStyle = PALETTE.building;
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.fillStyle = PALETTE.buildingLight;
-      ctx.fillRect(bx + bw * 0.05, by - bh * 0.25, bw * 0.9, bh * 0.25);
-
-      // 三角顶
-      ctx.beginPath();
-      ctx.moveTo(bx + bw * 0.02, by - bh * 0.25);
-      ctx.lineTo(W / 2, by - bh * 0.55);
-      ctx.lineTo(bx + bw * 0.98, by - bh * 0.25);
-      ctx.closePath(); ctx.fill();
-
-      // 柱子
-      ctx.fillStyle = '#3a3a4a';
-      const colW = bw * 0.04, colGap = bw * 0.11;
-      for (let i = 0; i < 7; i++) {
-        ctx.fillRect(bx + bw * 0.12 + i * colGap, by - bh * 0.2, colW, bh * 0.45);
-      }
-
-      // 门和窗户光
-      ctx.fillStyle = '#FFD70033';
-      ctx.fillRect(bx + bw * 0.42, by + bh * 0.1, bw * 0.16, bh * 0.4);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(bx + 5, by + 5, bw, bh);
+      ctx.fillStyle = PALETTE.building; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = PALETTE.buildingLight; ctx.fillRect(bx + bw * 0.05, by - bh * 0.25, bw * 0.9, bh * 0.25);
+      ctx.beginPath(); ctx.moveTo(bx + bw * 0.02, by - bh * 0.25); ctx.lineTo(W / 2, by - bh * 0.55); ctx.lineTo(bx + bw * 0.98, by - bh * 0.25); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#3a3a4a'; const colW = bw * 0.04, colGap = bw * 0.11;
+      for (let i = 0; i < 7; i++) ctx.fillRect(bx + bw * 0.12 + i * colGap, by - bh * 0.2, colW, bh * 0.45);
+      ctx.fillStyle = '#FFD70033'; ctx.fillRect(bx + bw * 0.42, by + bh * 0.1, bw * 0.16, bh * 0.4);
       ctx.fillStyle = '#FFD70022';
-      for (let i = 0; i < 5; i++) {
-        ctx.fillRect(bx + bw * 0.15 + i * bw * 0.14, by - bh * 0.1, bw * 0.08, bh * 0.1);
-      }
-
-      // 国旗飘扬动画
+      for (let i = 0; i < 5; i++) ctx.fillRect(bx + bw * 0.15 + i * bw * 0.14, by - bh * 0.1, bw * 0.08, bh * 0.1);
       const wave = Math.sin(Date.now() * 0.005) * 2;
-      ctx.fillStyle = '#FF2200';
-      ctx.fillRect(W / 2 - 2, by - bh * 0.6, 4, 15);
-      ctx.fillStyle = '#FFD700';
-      ctx.fillRect(W / 2 - 8, by - bh * 0.6 + wave, 16, 10);
-
+      ctx.fillStyle = '#FF2200'; ctx.fillRect(W / 2 - 2, by - bh * 0.6, 4, 15);
+      ctx.fillStyle = '#FFD700'; ctx.fillRect(W / 2 - 8, by - bh * 0.6 + wave, 16, 10);
       ctx.restore();
     }
 
@@ -648,7 +657,11 @@
           if (t.update(dt) && Math.random() < 0.02 * dt) {
             t.alive = false; missed++; combo = 0;
             document.getElementById('combo').textContent = '';
-            emitExplosion(t.position.x, t.position.y, '#FF0000', 10);
+            // 触发毁灭爆炸
+            emitFailExplosion(t.position.x, t.position.y);
+            screenShake.intensity = 15;
+            screenShake.timer = 0.4;
+            floatingTexts.push(new FloatingText(t.position.x, t.position.y - 30, '💥 突破!', '#FF0044', 18));
             if (missed >= CONFIG.missLimit) gameOver();
           }
         });
@@ -661,6 +674,12 @@
       particles = particles.filter(p => p.update(dt));
       floatingTexts = floatingTexts.filter(f => f.update(dt));
       if (screenShake.timer > 0) screenShake.timer -= dt / 60;
+      if (screenFlash.timer > 0) {
+        screenFlash.timer -= dt / 60;
+        screenFlash.intensity = screenFlash.timer / screenFlash.duration;
+      } else {
+        screenFlash.intensity = 0;
+      }
 
       ctx.save();
       if (screenShake.timer > 0) {
@@ -680,6 +699,12 @@
         const tp = 1 - (gameTime / CONFIG.gameDuration);
         ctx.fillStyle = '#111'; ctx.fillRect(16, H - 32, W - 32, 4);
         ctx.fillStyle = '#4488FF'; ctx.fillRect(16, H - 32, (W-32)*tp, 4);
+      }
+
+      // 屏幕闪烁
+      if (screenFlash.intensity > 0) {
+        ctx.fillStyle = screenFlash.color.replace('0.6', (0.6 * screenFlash.intensity).toFixed(2));
+        ctx.fillRect(0, 0, W, H);
       }
 
       ctx.restore();
