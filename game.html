@@ -2,62 +2,83 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>白宫保卫战</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; }
-    body { background: #1a0a00; touch-action: none; font-family: sans-serif; }
-    canvas { display: block; }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0508; touch-action: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    canvas { display: block; width: 100%; height: 100%; }
+    
+    /* UI 层: 安全区域适配 */
     #ui {
-      position: absolute; top: 0; left: 0; right: 0; padding: 12px 16px;
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: max(12px, env(safe-area-inset-top)) 16px 8px 16px;
       display: flex; justify-content: space-between; align-items: flex-start;
-      pointer-events: none; z-index: 10;
+      pointer-events: none; z-index: 10; color: #fff;
     }
-    #title { color: #FFD700; font-size: 18px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
-    #subtitle { color: #FF8800; font-size: 11px; margin-top: 4px; max-width: 70vw; line-height: 1.3; }
-    #score-panel { text-align: right; color: #fff; }
-    #score { font-size: 28px; font-weight: bold; text-shadow: 0 0 10px #FF4400; }
-    #combo { font-size: 14px; color: #FFD700; min-height: 18px; }
-    #timer { font-size: 14px; color: #FF8800; margin-top: 4px; }
+    
+    #title-area { max-width: 60%; }
+    #title { color: #FFD700; font-size: 18px; font-weight: 800; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+    #subtitle { color: #FF8800; font-size: 12px; margin-top: 4px; line-height: 1.3; }
+    
+    #score-panel { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    #score { font-size: 28px; font-weight: 900; text-shadow: 0 0 10px #FF4400; letter-spacing: 1px; }
+    #combo { font-size: 14px; color: #FFD700; min-height: 18px; font-weight: bold; }
+    #timer { font-size: 14px; color: #FF8800; margin-top: 4px; font-weight: bold; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; }
+
+    /* 底部新闻条: 安全区域适配 */
     #news-bar {
       position: absolute; bottom: 0; left: 0; right: 0;
-      padding: 8px 16px; background: linear-gradient(transparent, rgba(0,0,0,0.9));
-      color: #ccc; font-size: 11px; pointer-events: none; text-align: center;
+      padding: 8px 16px max(16px, env(safe-area-inset-bottom)) 16px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.95));
+      color: #aaa; font-size: 11px; pointer-events: none; text-align: center;
     }
+
+    /* 结算弹窗 */
     #game-over {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      text-align: center; color: #fff; display: none; z-index: 20;
-      background: rgba(0,0,0,0.85); padding: 30px; border-radius: 16px;
-      border: 2px solid #FF4400;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+      text-align: center; color: #fff; display: none; z-index: 20; opacity: 0;
+      background: rgba(20, 10, 15, 0.95); width: 80%; max-width: 320px;
+      padding: 24px; border-radius: 20px; border: 2px solid #FF4400;
+      box-shadow: 0 0 30px rgba(255, 68, 0, 0.3); transition: all 0.3s ease;
     }
-    #game-over h2 { color: #FF4400; font-size: 32px; margin-bottom: 10px; }
-    #game-over p { font-size: 18px; margin: 8px 0; }
-    #game-over .hint { color: #FF8800; font-size: 14px; margin-top: 20px; }
+    #game-over.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    #game-over h2 { color: #FF4400; font-size: 28px; margin-bottom: 16px; }
+    #game-over p { font-size: 18px; margin: 8px 0; color: #ddd; }
+    #game-over p span { color: #FFD700; font-weight: bold; }
+    #game-over .hint { color: #FF8800; font-size: 14px; margin-top: 24px; animation: pulse 1.5s infinite; }
+
+    /* 开始界面 */
     #start-screen {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      z-index: 25; background: rgba(10, 5, 0, 0.95);
+      z-index: 25; background: rgba(10, 5, 8, 0.98); padding: 40px 24px;
+      transition: opacity 0.5s;
     }
-    #start-screen h1 { color: #FF4400; font-size: 36px; margin-bottom: 8px; text-shadow: 0 0 20px #FF4400; }
-    #start-screen .news { color: #FF8800; font-size: 14px; max-width: 80%; text-align: center; margin-bottom: 30px; line-height: 1.5; }
+    #start-screen h1 { color: #FF4400; font-size: 32px; margin-bottom: 12px; text-shadow: 0 0 20px #FF4400; text-align: center; }
+    #start-screen .news { color: #FF8800; font-size: 15px; text-align: center; margin-bottom: 36px; line-height: 1.5; max-width: 90%; font-weight: bold; }
+    #start-screen .desc { color: #aaa; font-size: 14px; margin-bottom: 48px; text-align: center; }
     #start-screen .start-btn {
-      color: #FFD700; font-size: 20px; padding: 12px 40px;
-      border: 2px solid #FFD700; border-radius: 30px;
-      animation: pulse 1.5s infinite;
+      color: #0a0508; background: #FFD700; font-size: 20px; font-weight: bold;
+      padding: 14px 56px; border-radius: 40px; border: none; cursor: pointer;
+      animation: pulse 1.5s infinite; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
     }
+
     @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.7; transform: scale(1.05); }
+      0%, 100% { transform: scale(1); box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4); }
+      50% { transform: scale(1.05); box-shadow: 0 6px 25px rgba(255, 215, 0, 0.6); }
     }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
+  
   <div id="ui">
-    <div>
+    <div id="title-area">
       <div id="title">🏛️ 白宫保卫战</div>
-      <div id="subtitle">消除威胁，保护白宫！</div>
+      <div id="subtitle">消除威胁，保护安全</div>
     </div>
     <div id="score-panel">
       <div id="score">0</div>
@@ -65,21 +86,22 @@
       <div id="timer">⏱️ 45s</div>
     </div>
   </div>
-  <div id="news-bar">📰 热点: 特朗普在白宫晚宴遭枪击 | 点击消除红色威胁物</div>
+
+  <div id="news-bar">📰 热点: 特朗普在白宫晚宴遭枪击 | 点击红色威胁物消除</div>
 
   <div id="game-over">
     <h2 id="go-title">任务结束</h2>
     <p>最终得分: <span id="final-score">0</span></p>
     <p>最高连击: <span id="final-combo">0</span></p>
     <p id="go-rating"></p>
-    <p class="hint">点击任意位置重新开始</p>
+    <p class="hint">点击屏幕任意位置重新开始</p>
   </div>
 
   <div id="start-screen">
     <h1>🏛️ 白宫保卫战</h1>
-    <div class="news">📰 热点新闻: 特朗普在白宫晚宴遭枪击</div>
-    <div style="color:#FF8800;font-size:14px;margin-bottom:30px;">点击红色威胁物，保护白宫安全！</div>
-    <div class="start-btn" id="start-btn">点击开始</div>
+    <div class="news">📰 突发新闻: 特朗普在白宫晚宴遭枪击</div>
+    <div class="desc">特工，请点击红色威胁物，保护白宫安全！</div>
+    <div class="start-btn" id="start-btn">立即行动</div>
   </div>
 
   <script>
@@ -87,15 +109,20 @@
     'use strict';
 
     const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    let W, H;
+    const ctx = canvas.getContext('2d', { alpha: false }); // 优化渲染
+    let W, H, SCALE;
 
+    // === 屏幕适配与响应式 ===
     function resize() {
-      W = canvas.width = window.innerWidth * window.devicePixelRatio;
-      H = canvas.height = window.innerHeight * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-      W /= window.devicePixelRatio;
-      H /= window.devicePixelRatio;
+      const dpr = window.devicePixelRatio || 1;
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      ctx.scale(dpr, dpr);
+      
+      // 以 375px 宽度为基准计算缩放比例
+      SCALE = Math.min(W / 375, 1.2);
     }
     window.addEventListener('resize', resize);
     resize();
@@ -103,44 +130,38 @@
     // === 游戏配置 ===
     const CONFIG = {
       gameDuration: 45,
-      spawnRate: { base: 1.0, max: 3.5, curve: 1.8 },
-      maxOnScreen: 15,
+      // 针对竖屏优化：生成速度稍快，因为下落距离变长
+      spawnRate: { base: 1.2, max: 4.0, curve: 1.8 },
+      maxOnScreen: 12,
       types: { start: 2, max: 4, increaseAt: [0.3, 0.6] },
       tapScore: 15,
       comboMultiplier: 0.3,
       maxCombo: 10,
       missPenalty: -10,
-      missLimit: 10,
-      guaranteedEasy: 6,
+      missLimit: 8, // 稍微减少容错，增加紧张感
+      // 竖屏下落速度稍快，避免等待时间过长
+      threatSpeed: { base: 0.010, variance: 0.004 }
     };
 
     // === 配色方案 (紧张/危机) ===
     const PALETTE = {
-      bg: '#0a0508',
-      bgLight: '#1a0a10',
-      primary: '#FF2200',
-      secondary: '#FF6600',
-      accent: '#FFD700',
+      bg: '#0a0508', bgLight: '#1a0a10', primary: '#FF2200',
+      secondary: '#FF6600', accent: '#FFD700',
       threat: ['#FF2200', '#FF4400', '#FF6600', '#CC0000'],
-      shield: '#4488FF',
-      text: '#FFFFFF',
-      building: '#2a1a20',
-      buildingLight: '#3a2a30',
+      building: '#2a1a20', buildingLight: '#3a2a30'
     };
 
     // === 粒子系统 ===
     class Particle {
       constructor(x, y, vx, vy, life, color, size, type = 'circle') {
-        this.x = x; this.y = y;
-        this.vx = vx; this.vy = vy;
-        this.life = life; this.maxLife = life;
-        this.color = color; this.size = size;
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.life = life; this.maxLife = life; this.color = color;
+        this.size = size * SCALE; // 粒子大小自适应
         this.type = type; this.rotation = Math.random() * Math.PI * 2;
         this.rotSpeed = (Math.random() - 0.5) * 0.3;
       }
       update(dt) {
-        this.vy += 0.25 * dt;
-        this.vx *= 0.99; this.vy *= 0.99;
+        this.vy += 0.25 * dt; this.vx *= 0.99; this.vy *= 0.99;
         this.x += this.vx * dt; this.y += this.vy * dt;
         this.life -= dt; this.rotation += this.rotSpeed * dt;
         return this.life > 0;
@@ -150,15 +171,14 @@
         const s = this.size * alpha;
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
+        ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
         ctx.fillStyle = this.color;
         if (this.type === 'circle') {
           ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill();
         } else if (this.type === 'square') {
           ctx.fillRect(-s, -s, s * 2, s * 2);
         } else if (this.type === 'ring') {
-          ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+          ctx.strokeStyle = this.color; ctx.lineWidth = 2 * SCALE;
           ctx.beginPath(); ctx.arc(0, 0, s * 2, 0, Math.PI * 2); ctx.stroke();
         }
         ctx.restore();
@@ -170,25 +190,19 @@
     function emitExplosion(x, y, color, count = 18) {
       for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = 1 + Math.random() * 5;
+        const speed = (1 + Math.random() * 5) * SCALE;
         particles.push(new Particle(x, y,
           Math.cos(angle) * speed, Math.sin(angle) * speed,
-          0.5 + Math.random() * 0.4, color, 2 + Math.random() * 4,
+          0.5 + Math.random() * 0.4, color, 2 + Math.random() * 3,
           Math.random() > 0.5 ? 'circle' : 'square'
         ));
       }
-      // 环形扩散
       particles.push(new Particle(x, y, 0, 0, 0.3, color, 8, 'ring'));
     }
 
-    function emitMissEffect(x, y) {
-      for (let i = 0; i < 8; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        particles.push(new Particle(x, y,
-          Math.cos(angle) * 1.5, Math.sin(angle) * 1.5,
-          0.4, '#FF0000', 3, 'square'
-        ));
-      }
+    // 触摸涟漪反馈
+    function emitRipple(x, y) {
+      particles.push(new Particle(x, y, 0, 0, 0.3, 'rgba(255,255,255,0.4)', 5, 'ring'));
     }
 
     // === 浮动文字 ===
@@ -196,14 +210,14 @@
     class FloatingText {
       constructor(x, y, text, color = '#fff', size = 16) {
         this.x = x; this.y = y; this.text = text;
-        this.color = color; this.life = 1.0; this.size = size;
+        this.color = color; this.life = 1.0; this.size = size * SCALE;
       }
-      update(dt) { this.y -= 1.5 * dt; this.life -= 0.025 * dt; return this.life > 0; }
+      update(dt) { this.y -= 1.5 * dt * SCALE; this.life -= 0.025 * dt; return this.life > 0; }
       render(ctx) {
         ctx.save();
         ctx.globalAlpha = this.life;
         ctx.fillStyle = this.color;
-        ctx.font = `bold ${this.size}px sans-serif`;
+        ctx.font = `bold ${this.size}px -apple-system, sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 4;
         ctx.fillText(this.text, this.x, this.y);
@@ -216,10 +230,18 @@
       constructor(x, y, type, id) {
         this.x = x; this.y = y;
         this.type = type; this.id = id;
-        this.radius = 18 + Math.random() * 8;
-        this.targetX = x; this.targetY = H * 0.6 + Math.random() * H * 0.25;
-        this.progress = 0; this.speed = 0.008 + Math.random() * 0.005;
-        this.startX = x; this.startY = -30;
+        // 威胁物大小随屏幕宽度缩放
+        this.radius = (18 + Math.random() * 8) * SCALE;
+        
+        // 竖屏适配：目标点更靠下
+        this.targetX = x; 
+        this.targetY = H * 0.75 + Math.random() * (H * 0.15);
+        
+        this.progress = 0; 
+        // 速度随缩放微调
+        this.speed = (CONFIG.threatSpeed.base + Math.random() * CONFIG.threatSpeed.variance) * SCALE;
+        
+        this.startX = x; this.startY = -50;
         this.wobble = Math.random() * Math.PI * 2;
         this.alive = true; this.pulse = 0;
         this.color = PALETTE.threat[type % PALETTE.threat.length];
@@ -230,15 +252,16 @@
         this.pulse += 0.1 * dt;
         if (this.progress >= 1) {
           this.progress = 1;
-          return true; // 到达目标
+          return true;
         }
         return false;
       }
       get position() {
         const t = this.progress;
+        // 缓动函数
         const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
         return {
-          x: this.startX + (this.targetX - this.startX) * ease + Math.sin(this.wobble) * 5,
+          x: this.startX + (this.targetX - this.startX) * ease + Math.sin(this.wobble) * 5 * SCALE,
           y: this.startY + (this.targetY - this.startY) * ease
         };
       }
@@ -251,31 +274,37 @@
         ctx.translate(pos.x, pos.y);
 
         // 发光效果
-        const grad = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 1.5);
+        const grad = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2);
         grad.addColorStop(0, this.color + 'CC');
-        grad.addColorStop(0.6, this.color + '44');
+        grad.addColorStop(0.5, this.color + '33');
         grad.addColorStop(1, 'transparent');
         ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, r * 2, 0, Math.PI * 2); ctx.fill();
 
         // 主体
         ctx.fillStyle = this.color;
         ctx.globalAlpha = glow;
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        
+        // 内部纹理 (同心圆)
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 2 * SCALE;
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.6, 0, Math.PI * 2); ctx.stroke();
         ctx.globalAlpha = 1;
 
         // 内部标记
         ctx.fillStyle = '#000';
-        ctx.font = `bold ${r * 0.8}px sans-serif`;
+        ctx.font = `bold ${r * 1.2}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('⚠', 0, 1);
+        ctx.fillText('⚠', 0, r * 0.1);
 
         ctx.restore();
       }
       hitTest(x, y) {
         const pos = this.position;
         const dx = x - pos.x, dy = y - pos.y;
-        return dx * dx + dy * dy < (this.radius + 10) * (this.radius + 10);
+        // 稍微增加判定范围，优化手机点击体验
+        return dx * dx + dy * dy < (this.radius + 12 * SCALE) ** 2;
       }
     }
 
@@ -287,9 +316,9 @@
     let backgroundStars = [];
 
     // 初始化星星
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 60; i++) {
       backgroundStars.push({
-        x: Math.random() * 400, y: Math.random() * 300,
+        x: Math.random() * 400, y: Math.random() * 800,
         size: Math.random() * 1.5 + 0.5, alpha: Math.random() * 0.5 + 0.1,
         twinkle: Math.random() * Math.PI * 2
       });
@@ -311,58 +340,58 @@
         const alpha = s.alpha * (0.5 + 0.5 * Math.sin(s.twinkle));
         ctx.globalAlpha = alpha;
         ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(s.x * W / 400, s.y * H / 300, s.size, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(s.x * W / 400, s.y * H / 800, s.size, 0, Math.PI * 2); ctx.fill();
       });
       ctx.globalAlpha = 1;
 
-      // 白宫轮廓
       drawWhiteHouse();
     }
 
     function drawWhiteHouse() {
-      const bw = W * 0.5, bh = H * 0.18;
-      const bx = (W - bw) / 2, by = H * 0.78;
+      // 竖屏适配：建筑更宽
+      const bw = W * 0.75, bh = H * 0.14;
+      const bx = (W - bw) / 2, by = H * 0.82;
 
       ctx.save();
       // 主体
       ctx.fillStyle = PALETTE.building;
       ctx.fillRect(bx, by, bw, bh);
 
-      // 白色部分
+      // 顶部结构
       ctx.fillStyle = PALETTE.buildingLight;
-      ctx.fillRect(bx + bw * 0.1, by - bh * 0.3, bw * 0.8, bh * 0.3);
+      ctx.fillRect(bx + bw * 0.05, by - bh * 0.25, bw * 0.9, bh * 0.25);
 
-      // 三角顶
+      // 三角顶 (更平缓)
       ctx.beginPath();
-      ctx.moveTo(bx + bw * 0.05, by - bh * 0.3);
-      ctx.lineTo(W / 2, by - bh * 0.65);
-      ctx.lineTo(bx + bw * 0.95, by - bh * 0.3);
+      ctx.moveTo(bx + bw * 0.02, by - bh * 0.25);
+      ctx.lineTo(W / 2, by - bh * 0.55);
+      ctx.lineTo(bx + bw * 0.98, by - bh * 0.25);
       ctx.closePath(); ctx.fill();
 
       // 柱子
       ctx.fillStyle = '#3a3a4a';
-      const colW = bw * 0.06, colGap = bw * 0.13;
-      for (let i = 0; i < 6; i++) {
-        const cx = bx + bw * 0.15 + i * colGap;
-        ctx.fillRect(cx, by - bh * 0.25, colW, bh * 0.55);
+      const colW = bw * 0.04, colGap = bw * 0.11;
+      for (let i = 0; i < 7; i++) {
+        const cx = bx + bw * 0.12 + i * colGap;
+        ctx.fillRect(cx, by - bh * 0.2, colW, bh * 0.45);
       }
 
       // 门
       ctx.fillStyle = '#FFD70033';
       ctx.fillRect(bx + bw * 0.42, by + bh * 0.1, bw * 0.16, bh * 0.4);
 
-      // 窗户光
+      // 窗户
       ctx.fillStyle = '#FFD70022';
-      for (let i = 0; i < 4; i++) {
-        const wx = bx + bw * 0.2 + i * bw * 0.15;
-        ctx.fillRect(wx, by - bh * 0.15, bw * 0.08, bh * 0.12);
+      for (let i = 0; i < 5; i++) {
+        const wx = bx + bw * 0.15 + i * bw * 0.14;
+        ctx.fillRect(wx, by - bh * 0.1, bw * 0.08, bh * 0.1);
       }
 
       // 国旗
       ctx.fillStyle = '#FF2200';
-      ctx.fillRect(W / 2 - 2, by - bh * 0.7, 4, 15);
+      ctx.fillRect(W / 2 - 2, by - bh * 0.6, 4, 15);
       ctx.fillStyle = '#FFD700';
-      ctx.fillRect(W / 2 - 8, by - bh * 0.7, 16, 10);
+      ctx.fillRect(W / 2 - 8, by - bh * 0.6, 16, 10);
 
       ctx.restore();
     }
@@ -386,15 +415,19 @@
       if (threats.filter(t => t.alive).length >= CONFIG.maxOnScreen) return;
       const types = getActiveTypes();
       const type = Math.floor(Math.random() * types);
-      const x = 40 + Math.random() * (W - 80);
-      threats.push(new Threat(x, -30, type, threatId++));
+      // 确保不重叠生成
+      const margin = 40 * SCALE;
+      const x = margin + Math.random() * (W - 2 * margin);
+      threats.push(new Threat(x, -50, type, threatId++));
     }
 
     function handleTap(x, y) {
       if (!gameActive) return;
 
       let hit = false;
-      // 从后往前检测（优先点击最上面的）
+      // 触摸涟漪
+      emitRipple(x, y);
+
       for (let i = threats.length - 1; i >= 0; i--) {
         const t = threats[i];
         if (!t.alive) continue;
@@ -422,18 +455,14 @@
 
           document.getElementById('combo').textContent = combo >= 2 ? `🔥 ${combo}连击` : '';
           updateScore();
-          break; // 每次只消除一个
+          break;
         }
       }
 
       if (!hit) {
-        // 点击失误
         combo = 0;
         document.getElementById('combo').textContent = '';
-        score = Math.max(0, score + CONFIG.missPenalty);
-        emitMissEffect(x, y);
-        floatingTexts.push(new FloatingText(x, y, CONFIG.missPenalty.toString(), '#FF4444', 14));
-        updateScore();
+        // 失误不扣分，只断连击，防止挫败感太强
       }
     }
 
@@ -447,34 +476,58 @@
       document.getElementById('final-score').textContent = score;
       document.getElementById('final-combo').textContent = maxCombo;
       document.getElementById('go-rating').textContent = rating;
-      document.getElementById('go-title').textContent = score > 1500 ? '🛡️ 任务完成!' : '⚠️ 威胁过多!';
-      document.getElementById('game-over').style.display = 'block';
+      document.getElementById('go-title').textContent = score > 1500 ? '🛡️ 任务完成!' : '⚠️ 威胁突破!';
+      const go = document.getElementById('game-over');
+      go.style.display = 'block';
+      setTimeout(() => go.classList.add('show'), 10);
     }
 
     function restart() {
       score = 0; combo = 0; maxCombo = 0; missed = 0;
       gameTime = 0; threats = []; particles = []; floatingTexts = [];
       threatId = 0; spawnTimer = 0; gameActive = true;
+      
       document.getElementById('score').textContent = '0';
       document.getElementById('combo').textContent = '';
       document.getElementById('game-over').style.display = 'none';
       document.getElementById('start-screen').style.display = 'none';
     }
 
-    // === 输入 ===
+    // === 输入处理 ===
+    // 同时支持触摸和鼠标，坐标转换处理
+    function getEventPos(e) {
+      // 获取 Canvas 相对于视口的位置
+      const rect = canvas.getBoundingClientRect();
+      let x, y;
+      
+      if (e.touches && e.touches.length > 0) {
+        x = e.touches[0].clientX;
+        y = e.touches[0].clientY;
+      } else {
+        x = e.clientX;
+        y = e.clientY;
+      }
+      // 减去 Canvas 偏移量
+      return { x: x - rect.left, y: y - rect.top };
+    }
+
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      const t = e.touches[0];
-      handleTap(t.clientX, t.clientY);
+      if (!gameStarted) return;
+      if (!gameActive) { restart(); return; }
+      const pos = getEventPos(e);
+      handleTap(pos.x, pos.y);
     }, { passive: false });
 
     canvas.addEventListener('mousedown', (e) => {
       if (!gameStarted) return;
       if (!gameActive) { restart(); return; }
-      handleTap(e.clientX, e.clientY);
+      const pos = getEventPos(e);
+      handleTap(pos.x, pos.y);
     });
 
-    document.getElementById('start-btn').addEventListener('click', () => {
+    document.getElementById('start-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
       gameStarted = true;
       restart();
     });
@@ -491,7 +544,7 @@
         // 生成威胁
         spawnTimer += dt / 60;
         const rate = getDifficulty();
-        if (spawnTimer >= 1 / rate && gameTime > 1) {
+        if (spawnTimer >= 1 / rate && gameTime > 0.5) {
           spawnThreat();
           spawnTimer = 0;
         }
@@ -501,13 +554,14 @@
           if (!t.alive) return;
           const arrived = t.update(dt);
           if (arrived) {
-            // 到达目标位置后停留一段时间然后消失（算作漏掉）
-            if (Math.random() < 0.01 * dt) {
+            // 停留一小段时间后消失（算作漏掉）
+            if (Math.random() < 0.02 * dt) {
               t.alive = false;
               missed++;
               combo = 0;
               document.getElementById('combo').textContent = '';
-              emitMissEffect(t.position.x, t.position.y);
+              // 漏掉特效
+              emitExplosion(t.position.x, t.position.y, '#FF0000', 8);
               if (missed >= CONFIG.missLimit) {
                 gameOver();
               }
@@ -524,14 +578,12 @@
         if (remaining <= 0) gameOver();
       }
 
-      // 更新粒子
+      // 更新渲染
       particles = particles.filter(p => p.update(dt));
       floatingTexts = floatingTexts.filter(f => f.update(dt));
 
       // 屏幕震动
-      if (screenShake.timer > 0) {
-        screenShake.timer -= dt / 60;
-      }
+      if (screenShake.timer > 0) screenShake.timer -= dt / 60;
 
       // 渲染
       ctx.save();
@@ -542,33 +594,27 @@
 
       drawBackground(timestamp / 1000);
 
-      // 绘制威胁
       threats.forEach(t => { if (t.alive) t.render(ctx); });
-
-      // 绘制粒子
       particles.forEach(p => p.render(ctx));
       floatingTexts.forEach(f => f.render(ctx));
 
-      // 漏掉计数
+      // 底部漏掉进度条
       if (gameActive) {
-        ctx.fillStyle = '#FF4444';
-        ctx.font = 'bold 12px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(`漏掉: ${missed}/${CONFIG.missLimit}`, 16, H - 40);
-
-        // 进度条
-        const progress = gameTime / CONFIG.gameDuration;
-        ctx.fillStyle = '#333';
-        ctx.fillRect(16, H - 30, W - 32, 6);
-        const progGrad = ctx.createLinearGradient(0, 0, W, 0);
-        progGrad.addColorStop(0, '#4488FF');
-        progGrad.addColorStop(1, '#FF4400');
-        ctx.fillStyle = progGrad;
-        ctx.fillRect(16, H - 30, (W - 32) * progress, 6);
+        const progress = missed / CONFIG.missLimit;
+        ctx.fillStyle = '#440000';
+        ctx.fillRect(16, H - 24, W - 32, 6);
+        ctx.fillStyle = progress > 0.7 ? '#FF2200' : '#FF8800';
+        ctx.fillRect(16, H - 24, (W - 32) * progress, 6);
+        
+        // 倒计时条
+        const timeProg = 1 - (gameTime / CONFIG.gameDuration);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(16, H - 32, W - 32, 4);
+        ctx.fillStyle = '#4488FF';
+        ctx.fillRect(16, H - 32, (W - 32) * timeProg, 4);
       }
 
       ctx.restore();
-
       requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
