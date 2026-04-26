@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>白宫保卫战</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body { background: #1a0a00; touch-action: none; font-family: sans-serif; }
+    canvas { display: block; }
+    #ui {
+      position: absolute; top: 0; left: 0; right: 0; padding: 12px 16px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      pointer-events: none; z-index: 10;
+    }
+    #title { color: #FFD700; font-size: 18px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+    #subtitle { color: #FF8800; font-size: 11px; margin-top: 4px; max-width: 70vw; line-height: 1.3; }
+    #score-panel { text-align: right; color: #fff; }
+    #score { font-size: 28px; font-weight: bold; text-shadow: 0 0 10px #FF4400; }
+    #combo { font-size: 14px; color: #FFD700; min-height: 18px; }
+    #timer { font-size: 14px; color: #FF8800; margin-top: 4px; }
+    #news-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 8px 16px; background: linear-gradient(transparent, rgba(0,0,0,0.9));
+      color: #ccc; font-size: 11px; pointer-events: none; text-align: center;
+    }
+    #game-over {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; color: #fff; display: none; z-index: 20;
+      background: rgba(0,0,0,0.85); padding: 30px; border-radius: 16px;
+      border: 2px solid #FF4400;
+    }
+    #game-over h2 { color: #FF4400; font-size: 32px; margin-bottom: 10px; }
+    #game-over p { font-size: 18px; margin: 8px 0; }
+    #game-over .hint { color: #FF8800; font-size: 14px; margin-top: 20px; }
+    #start-screen {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 25; background: rgba(10, 5, 0, 0.95);
+    }
+    #start-screen h1 { color: #FF4400; font-size: 36px; margin-bottom: 8px; text-shadow: 0 0 20px #FF4400; }
+    #start-screen .news { color: #FF8800; font-size: 14px; max-width: 80%; text-align: center; margin-bottom: 30px; line-height: 1.5; }
+    #start-screen .start-btn {
+      color: #FFD700; font-size: 20px; padding: 12px 40px;
+      border: 2px solid #FFD700; border-radius: 30px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.05); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="ui">
+    <div>
+      <div id="title">🏛️ 白宫保卫战</div>
+      <div id="subtitle">消除威胁，保护白宫！</div>
+    </div>
+    <div id="score-panel">
+      <div id="score">0</div>
+      <div id="combo"></div>
+      <div id="timer">⏱️ 45s</div>
+    </div>
+  </div>
+  <div id="news-bar">📰 热点: 特朗普在白宫晚宴遭枪击 | 点击消除红色威胁物</div>
+
+  <div id="game-over">
+    <h2 id="go-title">任务结束</h2>
+    <p>最终得分: <span id="final-score">0</span></p>
+    <p>最高连击: <span id="final-combo">0</span></p>
+    <p id="go-rating"></p>
+    <p class="hint">点击任意位置重新开始</p>
+  </div>
+
+  <div id="start-screen">
+    <h1>🏛️ 白宫保卫战</h1>
+    <div class="news">📰 热点新闻: 特朗普在白宫晚宴遭枪击</div>
+    <div style="color:#FF8800;font-size:14px;margin-bottom:30px;">点击红色威胁物，保护白宫安全！</div>
+    <div class="start-btn" id="start-btn">点击开始</div>
+  </div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W, H;
+
+    function resize() {
+      W = canvas.width = window.innerWidth * window.devicePixelRatio;
+      H = canvas.height = window.innerHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      W /= window.devicePixelRatio;
+      H /= window.devicePixelRatio;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // === 游戏配置 ===
+    const CONFIG = {
+      gameDuration: 45,
+      spawnRate: { base: 1.0, max: 3.5, curve: 1.8 },
+      maxOnScreen: 15,
+      types: { start: 2, max: 4, increaseAt: [0.3, 0.6] },
+      tapScore: 15,
+      comboMultiplier: 0.3,
+      maxCombo: 10,
+      missPenalty: -10,
+      missLimit: 10,
+      guaranteedEasy: 6,
+    };
+
+    // === 配色方案 (紧张/危机) ===
+    const PALETTE = {
+      bg: '#0a0508',
+      bgLight: '#1a0a10',
+      primary: '#FF2200',
+      secondary: '#FF6600',
+      accent: '#FFD700',
+      threat: ['#FF2200', '#FF4400', '#FF6600', '#CC0000'],
+      shield: '#4488FF',
+      text: '#FFFFFF',
+      building: '#2a1a20',
+      buildingLight: '#3a2a30',
+    };
+
+    // === 粒子系统 ===
+    class Particle {
+      constructor(x, y, vx, vy, life, color, size, type = 'circle') {
+        this.x = x; this.y = y;
+        this.vx = vx; this.vy = vy;
+        this.life = life; this.maxLife = life;
+        this.color = color; this.size = size;
+        this.type = type; this.rotation = Math.random() * Math.PI * 2;
+        this.rotSpeed = (Math.random() - 0.5) * 0.3;
+      }
+      update(dt) {
+        this.vy += 0.25 * dt;
+        this.vx *= 0.99; this.vy *= 0.99;
+        this.x += this.vx * dt; this.y += this.vy * dt;
+        this.life -= dt; this.rotation += this.rotSpeed * dt;
+        return this.life > 0;
+      }
+      render(ctx) {
+        const alpha = Math.max(0, this.life / this.maxLife);
+        const s = this.size * alpha;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        ctx.fillStyle = this.color;
+        if (this.type === 'circle') {
+          ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill();
+        } else if (this.type === 'square') {
+          ctx.fillRect(-s, -s, s * 2, s * 2);
+        } else if (this.type === 'ring') {
+          ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(0, 0, s * 2, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    let particles = [];
+
+    function emitExplosion(x, y, color, count = 18) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 5;
+        particles.push(new Particle(x, y,
+          Math.cos(angle) * speed, Math.sin(angle) * speed,
+          0.5 + Math.random() * 0.4, color, 2 + Math.random() * 4,
+          Math.random() > 0.5 ? 'circle' : 'square'
+        ));
+      }
+      // 环形扩散
+      particles.push(new Particle(x, y, 0, 0, 0.3, color, 8, 'ring'));
+    }
+
+    function emitMissEffect(x, y) {
+      for (let i = 0; i < 8; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        particles.push(new Particle(x, y,
+          Math.cos(angle) * 1.5, Math.sin(angle) * 1.5,
+          0.4, '#FF0000', 3, 'square'
+        ));
+      }
+    }
+
+    // === 浮动文字 ===
+    let floatingTexts = [];
+    class FloatingText {
+      constructor(x, y, text, color = '#fff', size = 16) {
+        this.x = x; this.y = y; this.text = text;
+        this.color = color; this.life = 1.0; this.size = size;
+      }
+      update(dt) { this.y -= 1.5 * dt; this.life -= 0.025 * dt; return this.life > 0; }
+      render(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.font = `bold ${this.size}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 4;
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+      }
+    }
+
+    // === 威胁物 ===
+    class Threat {
+      constructor(x, y, type, id) {
+        this.x = x; this.y = y;
+        this.type = type; this.id = id;
+        this.radius = 18 + Math.random() * 8;
+        this.targetX = x; this.targetY = H * 0.6 + Math.random() * H * 0.25;
+        this.progress = 0; this.speed = 0.008 + Math.random() * 0.005;
+        this.startX = x; this.startY = -30;
+        this.wobble = Math.random() * Math.PI * 2;
+        this.alive = true; this.pulse = 0;
+        this.color = PALETTE.threat[type % PALETTE.threat.length];
+      }
+      update(dt) {
+        this.progress += this.speed * dt;
+        this.wobble += 0.05 * dt;
+        this.pulse += 0.1 * dt;
+        if (this.progress >= 1) {
+          this.progress = 1;
+          return true; // 到达目标
+        }
+        return false;
+      }
+      get position() {
+        const t = this.progress;
+        const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        return {
+          x: this.startX + (this.targetX - this.startX) * ease + Math.sin(this.wobble) * 5,
+          y: this.startY + (this.targetY - this.startY) * ease
+        };
+      }
+      render(ctx) {
+        const pos = this.position;
+        const r = this.radius;
+        const glow = Math.sin(this.pulse) * 0.2 + 0.8;
+
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+
+        // 发光效果
+        const grad = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 1.5);
+        grad.addColorStop(0, this.color + 'CC');
+        grad.addColorStop(0.6, this.color + '44');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, Math.PI * 2); ctx.fill();
+
+        // 主体
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = glow;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // 内部标记
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${r * 0.8}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('⚠', 0, 1);
+
+        ctx.restore();
+      }
+      hitTest(x, y) {
+        const pos = this.position;
+        const dx = x - pos.x, dy = y - pos.y;
+        return dx * dx + dy * dy < (this.radius + 10) * (this.radius + 10);
+      }
+    }
+
+    // === 游戏状态 ===
+    let score = 0, combo = 0, maxCombo = 0, missed = 0;
+    let gameTime = 0, gameActive = false, gameStarted = false;
+    let threats = []; let threatId = 0; let spawnTimer = 0;
+    let screenShake = { intensity: 0, timer: 0 };
+    let backgroundStars = [];
+
+    // 初始化星星
+    for (let i = 0; i < 50; i++) {
+      backgroundStars.push({
+        x: Math.random() * 400, y: Math.random() * 300,
+        size: Math.random() * 1.5 + 0.5, alpha: Math.random() * 0.5 + 0.1,
+        twinkle: Math.random() * Math.PI * 2
+      });
+    }
+
+    // === 背景绘制 ===
+    function drawBackground(time) {
+      // 夜空渐变
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+      bgGrad.addColorStop(0, '#0a0510');
+      bgGrad.addColorStop(0.5, '#1a0a15');
+      bgGrad.addColorStop(1, '#2a0a08');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // 星星
+      backgroundStars.forEach(s => {
+        s.twinkle += 0.02;
+        const alpha = s.alpha * (0.5 + 0.5 * Math.sin(s.twinkle));
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(s.x * W / 400, s.y * H / 300, s.size, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+
+      // 白宫轮廓
+      drawWhiteHouse();
+    }
+
+    function drawWhiteHouse() {
+      const bw = W * 0.5, bh = H * 0.18;
+      const bx = (W - bw) / 2, by = H * 0.78;
+
+      ctx.save();
+      // 主体
+      ctx.fillStyle = PALETTE.building;
+      ctx.fillRect(bx, by, bw, bh);
+
+      // 白色部分
+      ctx.fillStyle = PALETTE.buildingLight;
+      ctx.fillRect(bx + bw * 0.1, by - bh * 0.3, bw * 0.8, bh * 0.3);
+
+      // 三角顶
+      ctx.beginPath();
+      ctx.moveTo(bx + bw * 0.05, by - bh * 0.3);
+      ctx.lineTo(W / 2, by - bh * 0.65);
+      ctx.lineTo(bx + bw * 0.95, by - bh * 0.3);
+      ctx.closePath(); ctx.fill();
+
+      // 柱子
+      ctx.fillStyle = '#3a3a4a';
+      const colW = bw * 0.06, colGap = bw * 0.13;
+      for (let i = 0; i < 6; i++) {
+        const cx = bx + bw * 0.15 + i * colGap;
+        ctx.fillRect(cx, by - bh * 0.25, colW, bh * 0.55);
+      }
+
+      // 门
+      ctx.fillStyle = '#FFD70033';
+      ctx.fillRect(bx + bw * 0.42, by + bh * 0.1, bw * 0.16, bh * 0.4);
+
+      // 窗户光
+      ctx.fillStyle = '#FFD70022';
+      for (let i = 0; i < 4; i++) {
+        const wx = bx + bw * 0.2 + i * bw * 0.15;
+        ctx.fillRect(wx, by - bh * 0.15, bw * 0.08, bh * 0.12);
+      }
+
+      // 国旗
+      ctx.fillStyle = '#FF2200';
+      ctx.fillRect(W / 2 - 2, by - bh * 0.7, 4, 15);
+      ctx.fillStyle = '#FFD700';
+      ctx.fillRect(W / 2 - 8, by - bh * 0.7, 16, 10);
+
+      ctx.restore();
+    }
+
+    // === 游戏逻辑 ===
+    function getDifficulty() {
+      const progress = Math.min(gameTime / CONFIG.gameDuration, 1);
+      return CONFIG.spawnRate.base + Math.pow(progress, CONFIG.spawnRate.curve) *
+        (CONFIG.spawnRate.max - CONFIG.spawnRate.base);
+    }
+
+    function getActiveTypes() {
+      const progress = gameTime / CONFIG.gameDuration;
+      let types = CONFIG.types.start;
+      if (progress > CONFIG.types.increaseAt[0]) types++;
+      if (progress > CONFIG.types.increaseAt[1]) types++;
+      return Math.min(types, CONFIG.types.max);
+    }
+
+    function spawnThreat() {
+      if (threats.filter(t => t.alive).length >= CONFIG.maxOnScreen) return;
+      const types = getActiveTypes();
+      const type = Math.floor(Math.random() * types);
+      const x = 40 + Math.random() * (W - 80);
+      threats.push(new Threat(x, -30, type, threatId++));
+    }
+
+    function handleTap(x, y) {
+      if (!gameActive) return;
+
+      let hit = false;
+      // 从后往前检测（优先点击最上面的）
+      for (let i = threats.length - 1; i >= 0; i--) {
+        const t = threats[i];
+        if (!t.alive) continue;
+        if (t.hitTest(x, y)) {
+          t.alive = false;
+          hit = true;
+
+          // 连击系统
+          combo++;
+          if (combo > maxCombo) maxCombo = combo;
+          const comboMult = 1 + Math.min(combo * CONFIG.comboMultiplier, CONFIG.maxCombo - 1);
+          const earned = Math.round(CONFIG.tapScore * comboMult);
+          score += earned;
+
+          // 特效
+          const pos = t.position;
+          emitExplosion(pos.x, pos.y, t.color, 15 + combo * 2);
+          floatingTexts.push(new FloatingText(pos.x, pos.y - 20, `+${earned}`, combo >= 3 ? '#FFD700' : '#fff', 14 + Math.min(combo, 5) * 2));
+
+          if (combo >= 3) {
+            floatingTexts.push(new FloatingText(pos.x, pos.y - 45, `🔥 ${combo}连击!`, '#FF6600', 16));
+            screenShake.intensity = Math.min(combo, 8);
+            screenShake.timer = 0.2;
+          }
+
+          document.getElementById('combo').textContent = combo >= 2 ? `🔥 ${combo}连击` : '';
+          updateScore();
+          break; // 每次只消除一个
+        }
+      }
+
+      if (!hit) {
+        // 点击失误
+        combo = 0;
+        document.getElementById('combo').textContent = '';
+        score = Math.max(0, score + CONFIG.missPenalty);
+        emitMissEffect(x, y);
+        floatingTexts.push(new FloatingText(x, y, CONFIG.missPenalty.toString(), '#FF4444', 14));
+        updateScore();
+      }
+    }
+
+    function updateScore() {
+      document.getElementById('score').textContent = score;
+    }
+
+    function gameOver() {
+      gameActive = false;
+      const rating = score > 3000 ? '🏆 传奇安保' : score > 2000 ? '⭐ 优秀特工' : score > 1000 ? '👍 合格守卫' : '💪 继续加油';
+      document.getElementById('final-score').textContent = score;
+      document.getElementById('final-combo').textContent = maxCombo;
+      document.getElementById('go-rating').textContent = rating;
+      document.getElementById('go-title').textContent = score > 1500 ? '🛡️ 任务完成!' : '⚠️ 威胁过多!';
+      document.getElementById('game-over').style.display = 'block';
+    }
+
+    function restart() {
+      score = 0; combo = 0; maxCombo = 0; missed = 0;
+      gameTime = 0; threats = []; particles = []; floatingTexts = [];
+      threatId = 0; spawnTimer = 0; gameActive = true;
+      document.getElementById('score').textContent = '0';
+      document.getElementById('combo').textContent = '';
+      document.getElementById('game-over').style.display = 'none';
+      document.getElementById('start-screen').style.display = 'none';
+    }
+
+    // === 输入 ===
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const t = e.touches[0];
+      handleTap(t.clientX, t.clientY);
+    }, { passive: false });
+
+    canvas.addEventListener('mousedown', (e) => {
+      if (!gameStarted) return;
+      if (!gameActive) { restart(); return; }
+      handleTap(e.clientX, e.clientY);
+    });
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+      gameStarted = true;
+      restart();
+    });
+
+    // === 游戏循环 ===
+    let lastTime = 0;
+    function loop(timestamp) {
+      const dt = Math.min((timestamp - lastTime) / 16.67, 3);
+      lastTime = timestamp;
+
+      if (gameActive) {
+        gameTime += dt / 60;
+
+        // 生成威胁
+        spawnTimer += dt / 60;
+        const rate = getDifficulty();
+        if (spawnTimer >= 1 / rate && gameTime > 1) {
+          spawnThreat();
+          spawnTimer = 0;
+        }
+
+        // 更新威胁
+        threats.forEach(t => {
+          if (!t.alive) return;
+          const arrived = t.update(dt);
+          if (arrived) {
+            // 到达目标位置后停留一段时间然后消失（算作漏掉）
+            if (Math.random() < 0.01 * dt) {
+              t.alive = false;
+              missed++;
+              combo = 0;
+              document.getElementById('combo').textContent = '';
+              emitMissEffect(t.position.x, t.position.y);
+              if (missed >= CONFIG.missLimit) {
+                gameOver();
+              }
+            }
+          }
+        });
+
+        // 清理
+        threats = threats.filter(t => t.alive);
+
+        // 计时
+        const remaining = Math.max(0, CONFIG.gameDuration - gameTime);
+        document.getElementById('timer').textContent = `⏱️ ${Math.ceil(remaining)}s`;
+        if (remaining <= 0) gameOver();
+      }
+
+      // 更新粒子
+      particles = particles.filter(p => p.update(dt));
+      floatingTexts = floatingTexts.filter(f => f.update(dt));
+
+      // 屏幕震动
+      if (screenShake.timer > 0) {
+        screenShake.timer -= dt / 60;
+      }
+
+      // 渲染
+      ctx.save();
+      if (screenShake.timer > 0) {
+        const s = screenShake.intensity * (screenShake.timer / 0.2);
+        ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+      }
+
+      drawBackground(timestamp / 1000);
+
+      // 绘制威胁
+      threats.forEach(t => { if (t.alive) t.render(ctx); });
+
+      // 绘制粒子
+      particles.forEach(p => p.render(ctx));
+      floatingTexts.forEach(f => f.render(ctx));
+
+      // 漏掉计数
+      if (gameActive) {
+        ctx.fillStyle = '#FF4444';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`漏掉: ${missed}/${CONFIG.missLimit}`, 16, H - 40);
+
+        // 进度条
+        const progress = gameTime / CONFIG.gameDuration;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(16, H - 30, W - 32, 6);
+        const progGrad = ctx.createLinearGradient(0, 0, W, 0);
+        progGrad.addColorStop(0, '#4488FF');
+        progGrad.addColorStop(1, '#FF4400');
+        ctx.fillStyle = progGrad;
+        ctx.fillRect(16, H - 30, (W - 32) * progress, 6);
+      }
+
+      ctx.restore();
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
