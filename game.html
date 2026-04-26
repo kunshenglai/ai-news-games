@@ -387,6 +387,8 @@
         threats = threats.filter(t => t.alive);
         const rem = Math.max(0, CONFIG.gameDuration - gameTime); timerEl.textContent = `⏱️ ${Math.ceil(rem)}s`; if (rem <= 0) gameOver(); }
 
+      // Critical fix: Clear the particle canvas every frame to prevent trailing artifacts
+      pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
       updateAndRenderParticles(pCtx, dt); 
       floatingTexts = floatingTexts.filter(f => f.update(dt));
       if (screenShake.timer > 0) screenShake.timer -= dt / 60;
