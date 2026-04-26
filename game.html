@@ -75,7 +75,7 @@
   </div>
 
   <!-- 版本号显示 -->
-  <div id="version" style="position:absolute; bottom:50px; left:10px; color:#444; font-size:10px; z-index:100; font-family:monospace;">v4.0.0 - PixiJS WebGL Explosion</div>
+  <div id="version" style="position:absolute; bottom:50px; left:10px; color:#444; font-size:10px; z-index:100; font-family:monospace;">v4.0.1 - Fix Rendering Layer</div>
 
   <script>
   (() => {
@@ -87,8 +87,7 @@
       document.getElementById('version').innerText = "v3.0.0 - Basic Mode (CDN Error)";
       document.getElementById('version').style.color = "red";
     } else {
-      console.log("PixiJS loaded successfully!");
-      document.getElementById('version').innerText = "v4.0.0 - PixiJS WebGL Explosion";
+      document.getElementById('version').innerText = "v4.0.1 - PixiJS WebGL + Canvas Fix";
     }
 
     const startBtn = document.getElementById('start-btn');
@@ -108,7 +107,14 @@
       gameOverScreen.classList.remove('show');
       score = 0; combo = 0; maxCombo = 0; missed = 0;
       gameTime = 0; threats = [];
-      if (typeof PIXI !== 'undefined') particles = []; 
+      if (typeof PIXI !== 'undefined' && app) {
+        // 清理旧粒子
+        while(particles.length) {
+          const p = particles.pop();
+          app.stage.removeChild(p.sprite);
+          p.sprite.destroy();
+        }
+      }
       threatId = 0; spawnTimer = 0;
       scoreEl.textContent = '0'; comboEl.textContent = '';
     }
@@ -125,8 +131,13 @@
       const dpr = window.devicePixelRatio || 1;
       W = window.innerWidth; H = window.innerHeight;
       bgCanvas.width = W * dpr; bgCanvas.height = H * dpr;
-      ctx.scale(dpr, dpr);
+      
+      // 修复缩放累加问题：使用 setTransform 替换 scale
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      
       SCALE = Math.min(W / 375, 1.1);
+      
+      if (app) app.renderer.resize(W, H);
     }
     window.addEventListener('resize', resize);
     resize();
@@ -135,187 +146,127 @@
       types: { start: 3, max: 6, increaseAt: [0.25, 0.5, 0.75] }, tapScore: 15, comboMultiplier: 0.3, maxCombo: 10,
       missLimit: 8, threatSpeed: { base: 0.010, variance: 0.004 } };
     
-    // 威胁物颜色
     const THREAT_COLORS = ['#CC2200', '#DD4400', '#EE6600', '#AA0000', '#DD8800'];
     const PALETTE = { building: '#1a1218', buildingLight: '#2a2028' };
 
     // === PixiJS 粒子系统 ===
     let app = null;
     let particles = [];
-    let particleTextures = {};
 
     if (typeof PIXI !== 'undefined') {
       app = new PIXI.Application({
         background: null,
-        resizeTo: document.getElementById('pixi-container'),
-        antialias: true,
+        width: W,
+        height: H,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
       });
       document.getElementById('pixi-container').appendChild(app.view);
 
-      // 预生成粒子纹理 (径向渐变)
-      // 这样我们就不需要加载外部图片了
+      // 预生成粒子纹理
       function createGradientTexture(r, g, b) {
         const canvas = document.createElement('canvas');
         canvas.width = 64; canvas.height = 64;
         const context = canvas.getContext('2d');
         const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
         gradient.addColorStop(0, `rgba(255,255,255,1)`);
-        gradient.addColorStop(0.4, `rgba(${r},${g},${b},0.8)`);
+        gradient.addColorStop(0.3, `rgba(${r},${g},${b},0.9)`);
         gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
         context.fillStyle = gradient;
         context.fillRect(0, 0, 64, 64);
         return PIXI.Texture.from(canvas);
       }
 
-      particleTextures['fire_red'] = createGradientTexture(255, 50, 50);
-      particleTextures['fire_orange'] = createGradientTexture(255, 150, 50);
-      particleTextures['fire_yellow'] = createGradientTexture(255, 255, 100);
-      particleTextures['smoke'] = createGradientTexture(100, 100, 100);
-      particleTextures['spark'] = createGradientTexture(255, 255, 255);
+      PIXI.Assets.add('fire_red', createGradientTexture(255, 50, 50));
+      PIXI.Assets.add('fire_orange', createGradientTexture(255, 150, 50));
+      PIXI.Assets.add('smoke', createGradientTexture(80, 80, 80));
+      PIXI.Assets.add('spark', createGradientTexture(255, 255, 200));
     }
 
-    // 粒子类
     class Particle {
-      constructor(x, y, vx, vy, life, colorKey, size) {
-        this.x = x; this.y = y;
-        this.vx = vx; this.vy = vy;
-        this.life = life; this.maxLife = life;
-        this.colorKey = colorKey;
-        this.size = size;
-        this.sprite = new PIXI.Sprite(particleTextures[colorKey]);
+      constructor(x, y, vx, vy, life, textureKey, size) {
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.life = life; this.maxLife = life; this.size = size;
+        this.sprite = new PIXI.Sprite(PIXI.Assets.get(textureKey));
         this.sprite.anchor.set(0.5);
-        this.sprite.x = x;
-        this.sprite.y = y;
-        this.sprite.scale.set(size * 0.01);
-        // 关键：使用 ADD 混合模式实现叠加发光效果
-        this.sprite.blendMode = PIXI.BLEND_MODES.ADD; 
+        this.sprite.x = x; this.sprite.y = y;
+        this.sprite.blendMode = (textureKey === 'smoke') ? PIXI.BLEND_MODES.NORMAL : PIXI.BLEND_MODES.ADD;
         app.stage.addChild(this.sprite);
       }
       update(dt) {
         const dtSec = dt / 60;
-        this.vy += 0.2 * dtSec; // 重力
-        this.x += this.vx * dtSec;
-        this.y += this.vy * dtSec;
+        this.vy += (this.sprite.blendMode === PIXI.BLEND_MODES.NORMAL ? -0.5 : 0.2) * dtSec;
+        this.x += this.vx * dtSec; this.y += this.vy * dtSec;
         this.life -= dtSec;
         
         const alpha = Math.max(0, this.life / this.maxLife);
-        this.sprite.x = this.x;
-        this.sprite.y = this.y;
-        this.sprite.alpha = alpha;
-        // 粒子逐渐变小
-        this.sprite.scale.set(this.size * 0.01 * alpha);
-
+        this.sprite.x = this.x; this.sprite.y = this.y; this.sprite.alpha = alpha;
+        this.sprite.scale.set(this.size * SCALE * alpha);
+        
         if (this.life <= 0) {
-          app.stage.removeChild(this.sprite);
-          this.sprite.destroy();
-          return false;
+          app.stage.removeChild(this.sprite); this.sprite.destroy(); return false;
         }
         return true;
       }
     }
 
-    function emitParticle(x, y, vx, vy, life, colorKey, size) {
-      if (app && particles.length < 2000) {
-        particles.push(new Particle(x, y, vx, vy, life, colorKey, size));
-      }
+    function emitParticle(x, y, vx, vy, life, key, size) {
+      if (app && particles.length < 2000) particles.push(new Particle(x, y, vx, vy, life, key, size));
     }
 
     function updateParticles(dt) {
-      for (let i = particles.length - 1; i >= 0; i--) {
-        if (!particles[i].update(dt)) {
-          particles.splice(i, 1);
-        }
-      }
+      for (let i = particles.length - 1; i >= 0; i--) if (!particles[i].update(dt)) particles.splice(i, 1);
     }
 
-    // 爆炸效果生成器
-    function hexToRgb(hex) { return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)]; }
-
-    function emitExplosion(x, y, color, count = 50) {
-      if (!app) return; // Fallback if PixiJS not loaded
-      const rgb = hexToRgb(color);
-      
-      // 选择纹理
+    function emitExplosion(x, y, color) {
+      if (!app) return;
+      const rgb = [parseInt(color.slice(1,3),16), parseInt(color.slice(3,5),16), parseInt(color.slice(5,7),16)];
       const isRed = rgb[1] < 100;
       const fireTex = isRed ? 'fire_red' : 'fire_orange';
-
-      // 1. 核心闪光 (白色大球，瞬间消失)
-      emitParticle(x, y, 0, 0, 0.15, 'spark', 30);
-
-      // 2. 主体火焰 (大量粒子，ADD 混合)
-      for (let i = 0; i < count; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = (2 + Math.random() * 6) * SCALE;
-        const vx = Math.cos(angle) * speed;
-        const vy = Math.sin(angle) * speed;
-        const size = 8 + Math.random() * 12;
-        emitParticle(x, y, vx, vy, 0.5 + Math.random() * 0.4, fireTex, size);
-      }
       
-      // 3. 烟雾 (灰色，无发光)
+      // 核心闪光
+      emitParticle(x, y, 0, 0, 0.1, 'spark', 30);
+      // 主体火焰
+      for (let i = 0; i < 50; i++) {
+        const a = Math.random() * Math.PI * 2; const sp = (2 + Math.random() * 6) * SCALE;
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.5 + Math.random()*0.4, fireTex, 8 + Math.random()*12);
+      }
+      // 烟雾
       for (let i = 0; i < 15; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = (1 + Math.random() * 2) * SCALE;
-        const vx = Math.cos(angle) * speed;
-        const vy = Math.sin(angle) * speed - 1;
-        const p = new Particle(x, y, vx, vy, 1.2, 'smoke', 15 + Math.random() * 10);
-        p.sprite.blendMode = PIXI.BLEND_MODES.NORMAL; // 烟雾不加光
-        particles.push(p);
+        const a = Math.random() * Math.PI * 2; const sp = (1 + Math.random() * 2) * SCALE;
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 1, 1.2, 'smoke', 15 + Math.random()*10);
       }
-
-      // 4. 火花 (快速飞溅的小亮点)
+      // 火花
       for (let i = 0; i < 20; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = (6 + Math.random() * 10) * SCALE;
-        const vx = Math.cos(angle) * speed;
-        const vy = Math.sin(angle) * speed;
-        emitParticle(x, y, vx, vy, 0.4, 'spark', 4);
+        const a = Math.random() * Math.PI * 2; const sp = (6 + Math.random() * 10) * SCALE;
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.4, 'spark', 4);
       }
-
-      // 5. 屏幕闪光 (通过 Pixi 的 Graphics 覆盖一层白色然后快速消失)
-      const flash = new PIXI.Graphics();
-      flash.beginFill(0xFFFFFF);
-      flash.drawRect(0, 0, W, H);
-      flash.alpha = 0.5;
-      app.stage.addChild(flash);
-      setTimeout(() => {
-        app.stage.removeChild(flash);
-        flash.destroy();
-      }, 50);
+      // 屏幕闪光
+      const flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
+      flash.drawRect(0, 0, W, H); flash.alpha = 0.4; app.stage.addChild(flash);
+      setTimeout(() => { app.stage.removeChild(flash); flash.destroy(); }, 50);
     }
 
     function emitComboFirework(x, y, combo) {
       if (!app) return;
-      const colors = ['fire_red', 'fire_orange', 'fire_yellow', 'smoke'];
+      const colors = ['fire_red', 'fire_orange', 'spark', 'smoke'];
       for (let i = 0; i < 80 + combo * 10; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = (4 + Math.random() * 8) * SCALE;
-        emitParticle(x, y, Math.cos(angle)*speed, Math.sin(angle)*speed - 2, 0.8, colors[Math.floor(Math.random()*colors.length)], 6 + Math.random()*6);
+        const a = Math.random() * Math.PI * 2; const sp = (4 + Math.random() * 8) * SCALE;
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 2, 0.8, colors[Math.floor(Math.random()*colors.length)], 6 + Math.random()*6);
       }
     }
 
     function emitFailExplosion(x, y) {
       if (!app) return;
       for (let i = 0; i < 60; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = (3 + Math.random() * 8) * SCALE;
-        emitParticle(x, y, Math.cos(angle)*speed, Math.sin(angle)*speed, 0.8, 'fire_red', 10 + Math.random()*8);
+        const a = Math.random() * Math.PI * 2; const sp = (3 + Math.random() * 8) * SCALE;
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.8, 'fire_red', 10 + Math.random()*8);
       }
-      // 闪光
-      const flash = new PIXI.Graphics();
-      flash.beginFill(0xFF0000);
-      flash.drawRect(0, 0, W, H);
-      flash.alpha = 0.8;
-      app.stage.addChild(flash);
-      setTimeout(() => {
-        app.stage.removeChild(flash);
-        flash.destroy();
-      }, 100);
+      const flash = new PIXI.Graphics(); flash.beginFill(0xFF0000);
+      flash.drawRect(0, 0, W, H); flash.alpha = 0.8; app.stage.addChild(flash);
+      setTimeout(() => { app.stage.removeChild(flash); flash.destroy(); }, 100);
     }
 
-    // === 游戏元素 ===
     class Threat {
       constructor(x, y, type, id) {
         this.x = x; this.y = y; this.type = type % 6; this.id = id;
@@ -334,7 +285,6 @@
       render(c) { 
         const p = this.position; const r = this.radius; 
         c.save(); c.translate(p.x, p.y); 
-        // 纯红色球体
         c.fillStyle = this.color;
         c.beginPath(); c.arc(0, 0, r, 0, Math.PI*2); c.fill(); 
         c.fillStyle = 'rgba(255,255,255,0.3)';
@@ -352,9 +302,7 @@
     let screenShake = { intensity: 0, timer: 0 };
 
     function drawBackground(c) {
-      const bgGrad = c.createLinearGradient(0, 0, 0, H);
-      bgGrad.addColorStop(0, '#0a0510'); bgGrad.addColorStop(0.5, '#1a0a15'); bgGrad.addColorStop(1, '#2a0a08');
-      c.fillStyle = bgGrad; c.fillRect(0, 0, W, H);
+      c.fillStyle = '#0a0510'; c.fillRect(0, 0, W, H);
       drawWhiteHouse(c);
     }
 
@@ -368,9 +316,8 @@
       c.fillStyle = '#3a3a4a'; const colW = bw*0.04, colGap = bw*0.11;
       for (let i=0; i<7; i++) c.fillRect(bx + bw*0.12 + i*colGap, by - bh*0.2, colW, bh*0.45);
       c.fillStyle = '#FFD70033'; c.fillRect(bx + bw*0.42, by + bh*0.1, bw*0.16, bh*0.4);
-      const wave = Math.sin(Date.now()*0.005)*2;
       c.fillStyle = '#FF2200'; c.fillRect(W/2 - 2, by - bh*0.6, 4, 15);
-      c.fillStyle = '#FFD700'; c.fillRect(W/2 - 8, by - bh*0.6 + wave, 16, 10);
+      c.fillStyle = '#FFD700'; c.fillRect(W/2 - 8, by - bh*0.6, 16, 10);
       c.restore();
     }
 
@@ -382,27 +329,20 @@
 
     function handleTap(x, y) {
       if (!gameActive) return;
-      let hit = false;
       for (let i = threats.length - 1; i >= 0; i--) {
         const t = threats[i]; if (!t.alive) continue;
         if (t.hitTest(x, y)) {
-          t.alive = false; hit = true;
+          t.alive = false;
           combo++; if (combo > maxCombo) maxCombo = combo;
           const cm = 1 + Math.min(combo * CONFIG.comboMultiplier, CONFIG.maxCombo - 1);
-          const earned = Math.round(CONFIG.tapScore * cm); score += earned;
+          score += Math.round(CONFIG.tapScore * cm);
           const pos = t.position;
-          
-          // 调用 PixiJS 爆炸
-          emitExplosion(pos.x, pos.y, t.color, 60);
-          
-          if (combo >= 3) { 
-            emitComboFirework(pos.x, pos.y, combo); 
-            screenShake.intensity = Math.min(combo, 10); screenShake.timer = 0.25; 
-          }
-          comboEl.textContent = combo >= 2 ? `🔥 ${combo}连击` : ''; scoreEl.textContent = score; break;
+          emitExplosion(pos.x, pos.y, t.color);
+          if (combo >= 3) { emitComboFirework(pos.x, pos.y, combo); screenShake.intensity = Math.min(combo, 10); screenShake.timer = 0.25; }
+          comboEl.textContent = combo >= 2 ? `🔥 ${combo}连击` : ''; scoreEl.textContent = score; return;
         }
       }
-      if (!hit) { combo = 0; comboEl.textContent = ''; }
+      combo = 0; comboEl.textContent = '';
     }
 
     function gameOver() {
@@ -423,7 +363,8 @@
     document.body.addEventListener('mousedown', (e) => { if (!gameActive && gameStarted) { restartGame(); } });
 
     let lastTime = 0;
-    function loop(ts) { const dt = Math.min((ts - lastTime) / 16.67, 3); lastTime = ts;
+    function loop(ts) { 
+      const dt = Math.min((ts - lastTime) / 16.67, 3); lastTime = ts;
       if (gameActive) { gameTime += dt / 60; spawnTimer += dt / 60;
         if (spawnTimer >= 1 / getDifficulty() && gameTime > 0.5) { spawnThreat(); spawnTimer = 0; }
         threats.forEach(t => { if (!t.alive) return; if (t.update(dt) && Math.random() < 0.02 * dt) { t.alive = false; missed++; combo = 0;
@@ -435,11 +376,15 @@
 
       if (app) updateParticles(dt); 
       if (screenShake.timer > 0) screenShake.timer -= dt / 60;
-      if (app) app.ticker.update(); // 更新 Pixi 动画
-
+      
       ctx.save();
+      // 修复：清除时使用不带缩放的坐标
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+      ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+      
       if (screenShake.timer > 0) { const s = screenShake.intensity * (screenShake.timer / 0.25); ctx.translate((Math.random()-0.5)*s, (Math.random()-0.5)*s); }
-      ctx.clearRect(0, 0, W, H); // Clear background canvas
+      
       drawBackground(ctx);
       threats.forEach(t => { if (t.alive) t.render(ctx); });
       ctx.restore(); 
