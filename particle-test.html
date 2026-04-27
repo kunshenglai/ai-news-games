@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>💥 粒子效果实验室</title>
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a12;
+      color: #eee;
+      font-family: -apple-system, 'PingFang SC', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .header {
+      text-align: center;
+      padding: 20px;
+      position: relative;
+      z-index: 10;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #FF6B35, #FFD700);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header p { color: #888; font-size: 13px; margin-top: 6px; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      padding: 10px 20px;
+      position: relative;
+      z-index: 10;
+    }
+    .ctrl-btn {
+      padding: 10px 18px;
+      border: 1px solid #444;
+      border-radius: 25px;
+      background: #1a1a2e;
+      color: #ddd;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 600;
+    }
+    .ctrl-btn:hover, .ctrl-btn.active {
+      border-color: #FF6B35;
+      background: #FF6B3522;
+      color: #FF6B35;
+    }
+    .ctrl-btn .num {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      line-height: 20px;
+      text-align: center;
+      background: #FF6B35;
+      color: #000;
+      border-radius: 50%;
+      font-size: 11px;
+      margin-right: 6px;
+    }
+    #pixi-container {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+    }
+    .hint {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #555;
+      font-size: 13px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .back-link {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 100;
+      color: #888;
+      text-decoration: none;
+      font-size: 14px;
+      padding: 8px 16px;
+      border: 1px solid #333;
+      border-radius: 20px;
+      background: #1a1a2e;
+    }
+    .back-link:hover { color: #FF6B35; border-color: #FF6B35; }
+    .effect-name {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+      background: #1a1a2eee;
+      padding: 8px 16px;
+      border-radius: 12px;
+      border: 1px solid #333;
+      font-size: 14px;
+      font-weight: 700;
+      color: #FFD700;
+    }
+    .auto-toggle {
+      position: fixed;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      padding: 10px 24px;
+      background: #1a1a2e;
+      border: 1px solid #444;
+      border-radius: 25px;
+      color: #ddd;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .auto-toggle:hover { border-color: #FFD700; color: #FFD700; }
+  </style>
+</head>
+<body>
+  <a href="index.html" class="back-link">← 返回导航</a>
+  <div class="effect-name" id="effectName">效果 1: 经典烟花</div>
+  
+  <div class="header">
+    <h1>💥 粒子效果实验室</h1>
+    <p>点击下方按钮切换效果，点击屏幕任意位置触发爆炸</p>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl-btn active" onclick="setEffect(1)"><span class="num">1</span>经典烟花</button>
+    <button class="ctrl-btn" onclick="setEffect(2)"><span class="num">2</span>冲击波</button>
+    <button class="ctrl-btn" onclick="setEffect(3)"><span class="num">3</span>火焰喷射</button>
+    <button class="ctrl-btn" onclick="setEffect(4)"><span class="num">4</span>核爆蘑菇云</button>
+    <button class="ctrl-btn" onclick="setEffect(5)"><span class="num">5</span>碎片爆散</button>
+    <button class="ctrl-btn" onclick="setEffect(6)"><span class="num">6</span>电光爆炸</button>
+    <button class="ctrl-btn" onclick="setEffect(7)"><span class="num">7</span>冰霜爆裂</button>
+    <button class="ctrl-btn" onclick="setEffect(8)"><span class="num">8</span>七彩星爆</button>
+  </div>
+
+  <div class="auto-toggle" id="autoBtn" onclick="toggleAuto()">🎯 自动演示: 开</div>
+  <div class="hint">👆 点击屏幕任意位置触发爆炸</div>
+  <div id="pixi-container"></div>
+
+  <script>
+    // === 初始化 PixiJS ===
+    var W = window.innerWidth, H = window.innerHeight;
+    var SCALE = Math.min(W, H) / 800;
+    var app = new PIXI.Application({
+      width: W, height: H,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+      backgroundAlpha: 0, antialias: true
+    });
+    document.getElementById('pixi-container').appendChild(app.view);
+
+    var particles = [];
+    var effects = [];
+    var currentEffect = 1;
+    var autoDemo = true;
+    var autoTimer = 0;
+
+    // === 粒子纹理 ===
+    var particleTextures = {};
+    function makeTex(r, g, b, soft) {
+      var c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      var x = c.getContext('2d');
+      var grad = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+      var s = soft || 0.3;
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(s, 'rgba(' + r + ',' + g + ',' + b + ',0.95)');
+      grad.addColorStop(0.7, 'rgba(' + r + ',' + g + ',' + b + ',0.4)');
+      grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+      x.fillStyle = grad; x.fillRect(0, 0, 64, 64);
+      return PIXI.Texture.from(c);
+    }
+    particleTextures.fire = makeTex(255, 100, 30);
+    particleTextures.spark = makeTex(255, 255, 200, 0.1);
+    particleTextures.smoke = makeTex(80, 80, 80, 0.5);
+    particleTextures.debris = makeTex(200, 50, 0, 0.2);
+    particleTextures.ice = makeTex(100, 200, 255, 0.3);
+    particleTextures.electric = makeTex(150, 100, 255, 0.15);
+    particleTextures.gold = makeTex(255, 215, 0, 0.2);
+
+    // === 粒子类 ===
+    function Particle(x, y, vx, vy, life, key, size, gravity) {
+      this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+      this.life = life; this.maxLife = life; this.size = size;
+      this.rotation = Math.random() * Math.PI * 2;
+      this.rotSpeed = (Math.random() - 0.5) * 10;
+      this.gravity = gravity || 0.15;
+      var tex = particleTextures[key];
+      if (!tex) return;
+      this.sprite = new PIXI.Sprite(tex);
+      this.sprite.anchor.set(0.5);
+      this.sprite.x = x; this.sprite.y = y;
+      this.sprite.blendMode = (key === 'smoke' || key === 'ice') ? PIXI.BLEND_MODES.NORMAL : PIXI.BLEND_MODES.ADD;
+      app.stage.addChild(this.sprite);
+    }
+    Particle.prototype.update = function(dt) {
+      if (!this.sprite) return false;
+      var dtS = dt / 60;
+      this.vy += this.gravity * dtS;
+      this.vx *= 0.98;
+      this.x += this.vx * dtS; this.y += this.vy * dtS;
+      this.life -= dtS;
+      var progress = 1 - (this.life / this.maxLife);
+      var alpha = Math.max(0, this.life / this.maxLife);
+      var scaleBurst = progress < 0.1 ? progress / 0.1 : Math.max(0, 1 - (progress - 0.1) / 0.9);
+      this.sprite.x = this.x; this.sprite.y = this.y;
+      this.sprite.alpha = alpha * 0.9;
+      this.sprite.rotation += this.rotSpeed * dtS;
+      this.sprite.scale.set(this.size * SCALE * scaleBurst);
+      if (this.life <= 0) {
+        if (this.sprite.parent) this.sprite.parent.removeChild(this.sprite);
+        this.sprite.destroy(); return false;
+      }
+      return true;
+    };
+
+    function emitP(x, y, vx, vy, life, key, size, gravity) {
+      if (particles.length < 3000) particles.push(new Particle(x, y, vx, vy, life, key, size, gravity));
+    }
+
+    // === 冲击波环 ===
+    function Ring(x, y, maxR, color, lineWidth, life) {
+      this.x = x; this.y = y; this.r = 3 * SCALE;
+      this.maxR = maxR; this.color = color; this.lineWidth = lineWidth;
+      this.life = life || 0.3; this.maxLife = life || 0.3;
+      this.g = new PIXI.Graphics();
+      app.stage.addChild(this.g);
+    }
+    Ring.prototype.update = function(dt) {
+      var dtS = dt / 60;
+      this.life -= dtS;
+      if (this.life <= 0) { this.g.destroy(); return false; }
+      var p = 1 - this.life / this.maxLife;
+      this.r = 3 * SCALE + (this.maxR - 3 * SCALE) * Math.pow(p, 0.6);
+      var alpha = Math.max(0, 1 - p * p);
+      var lw = this.lineWidth * SCALE * (1 - p * 0.6);
+      this.g.clear();
+      this.g.lineStyle(lw, this.color, alpha);
+      this.g.drawCircle(this.x, this.y, this.r);
+      return true;
+    };
+
+    // === 火球 ===
+    function Fireball(x, y, maxR, color, life) {
+      this.x = x; this.y = y; this.r = 3 * SCALE;
+      this.maxR = maxR; this.color = color;
+      this.life = life || 0.35; this.maxLife = life || 0.35;
+      this.g = new PIXI.Graphics();
+      app.stage.addChild(this.g);
+    }
+    Fireball.prototype.update = function(dt) {
+      var dtS = dt / 60;
+      this.life -= dtS;
+      if (this.life <= 0) { this.g.destroy(); return false; }
+      var p = 1 - this.life / this.maxLife;
+      var rScale = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) * 0.5;
+      this.r = 3 * SCALE + (this.maxR - 3 * SCALE) * rScale;
+      var alpha = p < 0.6 ? 0.8 : Math.max(0, 0.8 * (1 - (p - 0.6) / 0.4));
+      this.g.clear();
+      this.g.beginFill(this.color, alpha);
+      this.g.drawCircle(this.x, this.y, this.r);
+      this.g.beginFill(0xFFFFFF, alpha * 0.5 * (1 - p));
+      this.g.drawCircle(this.x, this.y, this.r * 0.4);
+      this.g.endFill();
+      return true;
+    };
+
+    // ============ 8 种爆炸效果 ============
+
+    function effect1(x, y) { // 经典烟花
+      // 中心闪光
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
+      flash.drawCircle(x, y, 12 * SCALE); flash.alpha = 0.9;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 50);
+
+      // 火球
+      effects.push(new Fireball(x, y, 25 * SCALE, 0xFFAA33, 0.3));
+
+      // 冲击波
+      effects.push(new Ring(x, y, 50 * SCALE, 0xFFDD88, 3, 0.25));
+
+      // 彩色粒子
+      var colors = [0xFF4444, 0xFF8800, 0xFFDD00, 0xFFFF88, 0xFF6644];
+      for (var i = 0; i < 40; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (3 + Math.random() * 6) * SCALE;
+        var col = colors[Math.floor(Math.random() * colors.length)];
+        var tex = makeTex((col >> 16) & 0xFF, (col >> 8) & 0xFF, col & 0xFF, 0.2);
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 2, 0.4 + Math.random() * 0.3, 'spark', 2 + Math.random() * 3);
+      }
+
+      // 尾迹火花
+      for (var i = 0; i < 20; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (2 + Math.random() * 4) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.6 + Math.random() * 0.4, 'fire', 1.5 + Math.random() * 2);
+      }
+    }
+
+    function effect2(x, y) { // 冲击波（当前游戏用）
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
+      flash.drawCircle(x, y, 15 * SCALE); flash.alpha = 0.8;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 60);
+
+      effects.push(new Fireball(x, y, 28 * SCALE, 0xFFCC55, 0.35));
+      effects.push(new Ring(x, y, 60 * SCALE, 0xFFAA44, 4, 0.25));
+      setTimeout(function() { effects.push(new Ring(x, y, 80 * SCALE, 0xFF6622, 2.5, 0.3)); }, 50);
+      setTimeout(function() { effects.push(new Ring(x, y, 100 * SCALE, 0xFF4400, 1.5, 0.35)); }, 100);
+
+      for (var i = 0; i < 25; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (3 + Math.random() * 7) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 2, 0.4 + Math.random() * 0.3, 'debris', 2 + Math.random() * 4);
+      }
+      for (var i = 0; i < 20; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (4 + Math.random() * 8) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 3, 0.3 + Math.random() * 0.2, 'spark', 1.5 + Math.random() * 2);
+      }
+    }
+
+    function effect3(x, y) { // 火焰喷射
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFF6600);
+      flash.drawCircle(x, y, 20 * SCALE); flash.alpha = 0.7;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 80);
+
+      // 火柱
+      for (var i = 0; i < 80; i++) {
+        var a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8;
+        var sp = (4 + Math.random() * 10) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.5 + Math.random() * 0.8, 'fire', 4 + Math.random() * 8, 0.3);
+      }
+
+      // 烟雾柱
+      for (var i = 0; i < 20; i++) {
+        var a = -Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+        var sp = (2 + Math.random() * 4) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 3, 1.5 + Math.random(), 'smoke', 8 + Math.random() * 12, -0.3);
+      }
+
+      effects.push(new Ring(x, y, 40 * SCALE, 0xFF4400, 3, 0.2));
+    }
+
+    function effect4(x, y) { // 核爆蘑菇云
+      // 强光
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFEE);
+      flash.drawRect(0, 0, W, H); flash.alpha = 0.8;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 150);
+
+      // 巨大火球
+      effects.push(new Fireball(x, y, 50 * SCALE, 0xFF8800, 0.8));
+      setTimeout(function() { effects.push(new Fireball(x, y - 30 * SCALE, 40 * SCALE, 0xFF4400, 1.0)); }, 100);
+
+      // 多道冲击波
+      effects.push(new Ring(x, y, 100 * SCALE, 0xFFDD44, 6, 0.5));
+      setTimeout(function() { effects.push(new Ring(x, y, 150 * SCALE, 0xFF8800, 4, 0.6)); }, 200);
+
+      // 大量碎片
+      for (var i = 0; i < 60; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (2 + Math.random() * 8) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.8 + Math.random() * 0.6, 'debris', 3 + Math.random() * 6);
+      }
+
+      // 蘑菇云烟柱
+      for (var i = 0; i < 30; i++) {
+        var a = -Math.PI / 2 + (Math.random() - 0.5) * 0.6;
+        var sp = (1 + Math.random() * 3) * SCALE;
+        emitP(x, y + Math.random() * 20 * SCALE, Math.cos(a) * sp, Math.sin(a) * sp - 2, 1.5 + Math.random(), 'smoke', 10 + Math.random() * 15, -0.4);
+      }
+
+      // 火花
+      for (var i = 0; i < 40; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (5 + Math.random() * 12) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.5 + Math.random() * 0.5, 'spark', 2 + Math.random() * 3);
+      }
+    }
+
+    function effect5(x, y) { // 碎片爆散
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFF8844);
+      flash.drawCircle(x, y, 10 * SCALE); flash.alpha = 0.6;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 40);
+
+      effects.push(new Ring(x, y, 30 * SCALE, 0xFF6622, 2, 0.15));
+
+      // 大量不规则碎片
+      for (var i = 0; i < 50; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (4 + Math.random() * 10) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.6 + Math.random() * 0.5, 'debris', 3 + Math.random() * 6);
+      }
+
+      // 少量火花
+      for (var i = 0; i < 15; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (6 + Math.random() * 8) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 2, 0.3 + Math.random() * 0.2, 'spark', 1 + Math.random() * 2);
+      }
+
+      // 烟雾
+      for (var i = 0; i < 10; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (1 + Math.random() * 2) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 1, 1.0 + Math.random(), 'smoke', 6 + Math.random() * 8, -0.2);
+      }
+    }
+
+    function effect6(x, y) { // 电光爆炸
+      var flash = new PIXI.Graphics(); flash.beginFill(0xAA88FF);
+      flash.drawCircle(x, y, 18 * SCALE); flash.alpha = 0.9;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 80);
+
+      effects.push(new Ring(x, y, 70 * SCALE, 0xCC88FF, 3, 0.3));
+      setTimeout(function() { effects.push(new Ring(x, y, 90 * SCALE, 0x8844FF, 2, 0.35)); }, 60);
+
+      // 闪电粒子
+      for (var i = 0; i < 50; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (3 + Math.random() * 8) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.4 + Math.random() * 0.4, 'electric', 2 + Math.random() * 4, 0.05);
+      }
+
+      // 电弧（用 Graphics 画线）
+      for (var i = 0; i < 8; i++) {
+        drawLightning(x, y, (Math.random() - 0.5) * 120 * SCALE, (Math.random() - 0.5) * 120 * SCALE, 0.2 + Math.random() * 0.2);
+      }
+
+      // 小火花
+      for (var i = 0; i < 30; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (5 + Math.random() * 10) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.2 + Math.random() * 0.3, 'spark', 1 + Math.random() * 2);
+      }
+    }
+
+    function drawLightning(x, y, dx, dy, life) {
+      var g = new PIXI.Graphics();
+      g.lineStyle(2 * SCALE, 0xCCAAFF, 0.9);
+      var steps = 8;
+      var cx = x, cy = y;
+      g.moveTo(cx, cy);
+      for (var i = 1; i <= steps; i++) {
+        var t = i / steps;
+        cx = x + dx * t + (Math.random() - 0.5) * 20 * SCALE;
+        cy = y + dy * t + (Math.random() - 0.5) * 20 * SCALE;
+        g.lineTo(cx, cy);
+      }
+      app.stage.addChild(g);
+      setTimeout(function() { if(g.parent) g.parent.removeChild(g); g.destroy(); }, life * 1000);
+    }
+
+    function effect7(x, y) { // 冰霜爆裂
+      var flash = new PIXI.Graphics(); flash.beginFill(0xCCDDFF);
+      flash.drawCircle(x, y, 15 * SCALE); flash.alpha = 0.7;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 100);
+
+      effects.push(new Ring(x, y, 60 * SCALE, 0x88BBFF, 4, 0.4));
+      setTimeout(function() { effects.push(new Ring(x, y, 80 * SCALE, 0xAAEEFF, 2, 0.5)); }, 150);
+
+      // 冰晶粒子
+      for (var i = 0; i < 50; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (2 + Math.random() * 6) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.8 + Math.random() * 0.5, 'ice', 3 + Math.random() * 5, 0.05);
+      }
+
+      // 雪花
+      for (var i = 0; i < 30; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (1 + Math.random() * 3) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 1, 1.5 + Math.random(), 'spark', 1.5 + Math.random() * 2, -0.1);
+      }
+
+      // 雾气
+      for (var i = 0; i < 15; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (1 + Math.random() * 2) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 0.5, 2.0, 'smoke', 8 + Math.random() * 10, -0.15);
+      }
+    }
+
+    function effect8(x, y) { // 七彩星爆
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
+      flash.drawCircle(x, y, 12 * SCALE); flash.alpha = 0.8;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 60);
+
+      effects.push(new Ring(x, y, 55 * SCALE, 0xFFFFFF, 2, 0.3));
+
+      var colors = [0xFF0044, 0xFF8800, 0xFFDD00, 0x00FF88, 0x0088FF, 0xAA00FF, 0xFF00FF];
+      // 每个颜色一个方向束
+      for (var c = 0; c < colors.length; c++) {
+        var baseA = (c / colors.length) * Math.PI * 2;
+        var col = colors[c];
+        var tex = makeTex((col >> 16) & 0xFF, (col >> 8) & 0xFF, col & 0xFF, 0.15);
+        for (var i = 0; i < 12; i++) {
+          var a = baseA + (Math.random() - 0.5) * 0.4;
+          var sp = (4 + Math.random() * 8) * SCALE;
+          emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.5 + Math.random() * 0.5, 'spark', 2 + Math.random() * 3);
+        }
+      }
+
+      // 金色尾迹
+      for (var i = 0; i < 20; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (2 + Math.random() * 4) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.8 + Math.random() * 0.4, 'gold', 1.5 + Math.random() * 2);
+      }
+    }
+
+    var effectFns = [null, effect1, effect2, effect3, effect4, effect5, effect6, effect7, effect8];
+    var effectNames = ['', '经典烟花', '冲击波（游戏当前版）', '火焰喷射', '核爆蘑菇云', '碎片爆散', '电光爆炸', '冰霜爆裂', '七彩星爆'];
+
+    function setEffect(n) {
+      currentEffect = n;
+      document.getElementById('effectName').textContent = '效果 ' + n + ': ' + effectNames[n];
+      var btns = document.querySelectorAll('.ctrl-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('active', i === n - 1);
+      }
+    }
+
+    function triggerExplosion(x, y) {
+      effectFns[currentEffect](x, y);
+    }
+
+    // 点击触发
+    app.view.addEventListener('pointerdown', function(e) {
+      triggerExplosion(e.global.x, e.global.y);
+    });
+
+    // 自动演示
+    function toggleAuto() {
+      autoDemo = !autoDemo;
+      document.getElementById('autoBtn').textContent = autoDemo ? '🎯 自动演示: 开' : '🎯 自动演示: 关';
+    }
+
+    // 游戏主循环
+    app.ticker.add(function(delta) {
+      var dt = delta;
+      // 更新粒子
+      for (var i = particles.length - 1; i >= 0; i--) {
+        if (!particles[i].update(dt)) particles.splice(i, 1);
+      }
+      // 更新特效对象
+      for (var i = effects.length - 1; i >= 0; i--) {
+        if (!effects[i].update(dt)) effects.splice(i, 1);
+      }
+      // 自动演示
+      if (autoDemo) {
+        autoTimer += dt;
+        if (autoTimer > 50) {
+          autoTimer = 0;
+          var cx = W * 0.2 + Math.random() * W * 0.6;
+          var cy = H * 0.2 + Math.random() * H * 0.5;
+          triggerExplosion(cx, cy);
+        }
+      }
+    });
+
+    // 窗口resize
+    window.addEventListener('resize', function() {
+      W = window.innerWidth; H = window.innerHeight;
+      SCALE = Math.min(W, H) / 800;
+      app.renderer.resize(W, H);
+    });
+  </script>
+</body>
+</html>
