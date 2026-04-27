@@ -110,6 +110,11 @@
     var THREAT_COLORS = ['#CC2200', '#DD4400', '#EE6600', '#AA0000', '#DD8800'];
     var PALETTE = { building: '#1a1218', buildingLight: '#2a2028' };
 
+    // 预设系统变量（在 try 外部声明，确保函数可访问）
+    var texCache = {};
+    var _effects = [];
+    var _presetSprites = [];
+
     if (typeof PIXI !== 'undefined') {
       try {
         app = new PIXI.Application({
@@ -138,10 +143,7 @@
         particleTextures.smoke = makeTex(80, 80, 80);
         particleTextures.debris = makeTex(200, 50, 0);
 
-        // 纹理缓存（用于预设系统动态纹理）
-        var texCache = {};
-        var _effects = []; // 存储预设系统的火球/冲击波对象
-        var _presetSprites = []; // 存储预设系统的粒子精灵
+        // 纹理缓存和效果数组已在 try 外部声明
 
         // 冲击波预设配置
         var SHOCKWAVE_PRESET = {
@@ -296,6 +298,9 @@
           }
         }
 
+        // updateEffects and updatePresetSprites moved below try block      } catch (e) { setVersion('Pixi Error'); }
+    } else { setVersion('PixiJS CDN Failed'); }
+
         // 预设效果对象更新
         function updateEffects(dt) {
           var dtS = dt / 60;
@@ -355,8 +360,7 @@
             p.sprite.scale.set(p.size * SCALE * scaleBurst);
           }
         }
-      } catch (e) { setVersion('Pixi Error'); }
-    } else { setVersion('PixiJS CDN Failed'); }
+
 
     // === 粒子系统 ===
     var explosions = []; // 存储 PIXI.Graphics 爆炸对象
