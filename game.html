@@ -51,7 +51,7 @@
     <div class="news">📰 突发: 特朗普在白宫晚宴遭枪击</div>
     <div class="start-btn" id="start-btn">立即行动</div>
   </div>
-  <div id="version">v5.3.0 - Shockwave</div>
+  <div id="version">v5.4.0 - Shockwave</div>
 
   <script>
   (function() {
@@ -69,7 +69,26 @@
     var score = 0, combo = 0, maxCombo = 0, missed = 0;
     var gameTime = 0, threatId = 0, spawnTimer = 0;
     var threats = [];
-    var screenShake = { intensity: 0, timer: 0 };
+    var screenShake = { intensity: 0, timer: 0, offsetX: 0, offsetY: 0 };
+
+    function triggerShake(intensity) {
+      screenShake.intensity = intensity;
+      screenShake.timer = 0.15; // 150ms shake duration
+    }
+
+    function updateScreenShake(dt) {
+      if (screenShake.timer <= 0) {
+        screenShake.offsetX = 0;
+        screenShake.offsetY = 0;
+        return;
+      }
+      screenShake.timer -= dt / 60;
+      var t = screenShake.timer / 0.15; // normalized 0-1
+      var decay = t * t; // quadratic decay
+      var ix = screenShake.intensity * decay;
+      screenShake.offsetX = (Math.random() - 0.5) * ix * 2;
+      screenShake.offsetY = (Math.random() - 0.5) * ix * 2;
+    }
 
     var startBtn = document.getElementById('start-btn');
     var startScreen = document.getElementById('start-screen');
@@ -662,12 +681,26 @@
           score += Math.round(CONFIG.tapScore * cm);
           var pos = t.position();
           emitPreset(pos.x, pos.y, t.color);
+          triggerShake(6 + Math.min(combo, 10)); // 连击越多震动越强
           comboEl.textContent = combo >= 2 ? '🔥 ' + combo + '连击' : '';
           scoreEl.textContent = score;
           return;
         }
       }
       combo = 0; comboEl.textContent = '';
+      // 空点击反馈：小火花 + 轻微震动
+      triggerShake(2);
+      emitEmptySpark(x, y);
+    }
+
+    // 空点击火花效果
+    function emitEmptySpark(x, y) {
+      if (!app) return;
+      for (var i = 0; i < 6; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = 30 + Math.random() * 60;
+        emitParticle(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.2 + Math.random() * 0.15, 'spark', 1 + Math.random());
+      }
     }
 
     function gameOver() {
@@ -771,12 +804,19 @@
         // 更新预设爆炸效果
         updateEffects(dt);
         updatePresetSprites(dt);
+        // 屏幕震动效果
+        updateScreenShake(dt);
+        app.stage.position.set(screenShake.offsetX, screenShake.offsetY);
       }
 
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
       ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+      // 应用屏幕震动偏移
+      if (screenShake.offsetX || screenShake.offsetY) {
+        ctx.translate(screenShake.offsetX, screenShake.offsetY);
+      }
       drawBackground(ctx);
       for (var i = 0; i < threats.length; i++) {
         if (threats[i].alive) threats[i].render(ctx);
@@ -786,7 +826,7 @@
       requestAnimationFrame(loop);
     }
 
-    setVersion('冲击波爆炸 v5.3.0');
+    setVersion('冲击波爆炸 v5.4.0');
     requestAnimationFrame(loop);
   })();
   </script>
