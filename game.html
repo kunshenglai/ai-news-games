@@ -311,15 +311,15 @@
             var p = 1 - e.life / e.maxLife;
             e.g.clear();
             if (e.type === 'ring') {
-              e.r = 3 * S + (e.maxR - 3 * S) * Math.pow(p, 0.6);
+              e.r = 3 * SCALE + (e.maxR - 3 * SCALE) * Math.pow(p, 0.6);
               var alpha = Math.max(0, 1 - p * p);
               var lw = e.lineWidth * (1 - p * 0.7);
-              e.g.lineStyle(lw * S, e.color, alpha);
+              e.g.lineStyle(lw * SCALE, e.color, alpha);
               e.g.drawCircle(e.x, e.y, e.r);
             } else {
               // fireball
               var rScale = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) * 0.5;
-              e.r = 3 * S + (e.maxR - 3 * S) * rScale;
+              e.r = 3 * SCALE + (e.maxR - 3 * SCALE) * rScale;
               var alpha = p < 0.6 ? 0.8 : Math.max(0, 0.8 * (1 - (p - 0.6) / 0.4));
               e.g.beginFill(e.color, alpha);
               e.g.drawCircle(e.x, e.y, e.r);
@@ -352,7 +352,7 @@
             p.sprite.x = p.x; p.sprite.y = p.y;
             p.sprite.alpha = alpha * 0.9;
             p.sprite.rotation += p.rotSpeed * dtS;
-            p.sprite.scale.set(p.size * S * scaleBurst);
+            p.sprite.scale.set(p.size * SCALE * scaleBurst);
           }
         }
       } catch (e) { setVersion('Pixi Error'); }
