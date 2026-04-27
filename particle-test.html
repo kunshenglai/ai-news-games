@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>💥 粒子效果实验室</title>
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@pixi/particle@3.3.3/dist/pixi-particle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pixi-particles@4.3.1/dist/pixi-particles.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -257,46 +257,39 @@
       var config = PARTICLE_PRESETS[currentPreset];
       if (!config) return;
 
-      var container = new PIXI.Container();
-      app.stage.addChild(container);
-
       // 深拷贝配置
       var cfg = JSON.parse(JSON.stringify(config));
 
-      // 创建 Emitter
-      var emitter = new PIXI.particles.Emitter({
-        parent: container,
-        pos: { x: x, y: y },
-        autoUpdate: true,
+      // 选择纹理
+      var tex;
+      if (currentPreset.indexOf('smoke') >= 0) {
+        tex = texSmoke;
+      } else if (currentPreset.indexOf('snow') >= 0 || currentPreset.indexOf('rain') >= 0) {
+        tex = texSpark;
+      } else {
+        tex = texDefault;
+      }
+
+      // v4: new Emitter(parent, particleImages, config)
+      var emitter = new PIXI.particles.Emitter(app.stage, [tex], {
+        lifetime: cfg.lifetime,
+        frequency: cfg.frequency,
         emitterLifetime: cfg.emitterLifetime,
         maxParticles: cfg.maxParticles,
-        config: {
-          lifetime: cfg.lifetime,
-          frequency: cfg.frequency,
-          behaviors: cfg.behaviors
-        }
+        pos: { x: x, y: y },
+        behaviors: cfg.behaviors
       });
-
-      // 设置纹理
-      if (currentPreset.indexOf('smoke') >= 0) {
-        emitter.addParticleImages(texSmoke);
-      } else if (currentPreset.indexOf('snow') >= 0 || currentPreset.indexOf('rain') >= 0) {
-        emitter.addParticleImages(texSpark);
-      } else {
-        emitter.addParticleImages(texDefault);
-      }
 
       emitter.emit = true;
       activeEmitters.push(emitter);
 
       // 自动清理
+      var cleanupTime = (cfg.emitterLifetime + cfg.lifetime.max) * 1000 + 500;
       setTimeout(function() {
         emitter.destroy();
         var idx = activeEmitters.indexOf(emitter);
         if (idx >= 0) activeEmitters.splice(idx, 1);
-        if (container.parent) container.parent.removeChild(container);
-        container.destroy();
-      }, (cfg.emitterLifetime + cfg.lifetime.max) * 1000 + 500);
+      }, cleanupTime);
     }
 
     // 点击触发
@@ -309,6 +302,23 @@
       autoDemo = !autoDemo;
       document.getElementById('autoBtn').textContent = autoDemo ? '🎯 自动演示: 开' : '🎯 自动演示: 关';
     }
+
+    // 自动演示逻辑（在 ticker 中调用）
+    app.ticker.add(function(delta) {
+      var dt = delta / 60;
+      for (var i = activeEmitters.length - 1; i >= 0; i--) {
+        activeEmitters[i].update(dt);
+      }
+      if (autoDemo) {
+        autoTimer += dt;
+        if (autoTimer > 0.8) {
+          autoTimer = 0;
+          var cx = W * 0.2 + Math.random() * W * 0.6;
+          var cy = H * 0.2 + Math.random() * H * 0.5;
+          triggerExplosion(cx, cy);
+        }
+      }
+    });
 
     // resize
     window.addEventListener('resize', function() {
