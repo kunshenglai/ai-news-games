@@ -103,14 +103,14 @@
 
     var CONFIG = {
       gameDuration: 45,
-      spawnRate: { base: 1.2, max: 4.0, curve: 1.8 },
+      spawnRate: { base: 0.8, max: 2.0, curve: 1.5 },
       maxOnScreen: 12,
       types: { start: 3, max: 6, increaseAt: [0.25, 0.5, 0.75] },
       tapScore: 15,
       comboMultiplier: 0.3,
       maxCombo: 10,
-      missLimit: 8,
-      threatSpeed: { base: 0.010, variance: 0.004 }
+      missLimit: 15,
+      threatSpeed: { base: 0.006, variance: 0.002 }
     };
     var THREAT_COLORS = ['#CC2200', '#DD4400', '#EE6600', '#AA0000', '#DD8800'];
     var PALETTE = { building: '#1a1218', buildingLight: '#2a2028' };
