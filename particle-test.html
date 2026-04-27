@@ -5,7 +5,677 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>💥 粒子效果实验室</title>
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
-  <script src="particle-presets.js?v=2"></script>
+  <script>
+// ============================================================
+// 粒子效果预设库 (JSON 配置驱动)
+// 用法: emitPreset(x, y, presetName, { app, particles, effects, SCALE })
+// 完全兼容手写粒子系统，不依赖 pixi-particles 外部库
+// ============================================================
+
+var PARTICLE_PRESETS = {
+
+  // === 爆炸类 ===
+
+  "explosion_fireball": {
+    name: "火球爆炸",
+    category: "explosion",
+    // 中心闪光
+    flash: { color: 0xFFFFFF, size: 10, alpha: 0.9, duration: 40 },
+    // 火球 (PIXI.Graphics)
+    fireballs: [
+      { color: 0xFFAA33, maxR: 20, life: 0.2, delay: 0 }
+    ],
+    // 冲击波
+    rings: [
+      { color: 0xFFDD88, maxR: 40, lineWidth: 2, life: 0.15, delay: 0 }
+    ],
+    // 彩色粒子 (从火球边缘出发，延迟)
+    particles: [
+      {
+        count: 50, colors: [0xFF2244, 0xFF6600, 0xFFAA00, 0xFFDD00, 0xFFFF44, 0x44FF44, 0x4488FF, 0xFF44AA],
+        speed: { min: 80, max: 200 }, life: { min: 0.4, max: 0.7 },
+        size: { min: 2, max: 4 }, texSharpness: 0.05,
+        launchOffset: 12, gravity: 0.15, blendMode: 'add', delay: 50
+      }
+    ],
+    // 尾迹
+    trails: [
+      {
+        count: 20, colors: [0xFFDD88, 0xFFCC44, 0xFFAA00],
+        speed: { min: 30, max: 80 }, life: { min: 0.5, max: 0.8 },
+        size: { min: 1.5, max: 3 }, texSharpness: 0.05,
+        launchOffset: 20, gravity: 0.05, blendMode: 'add', delay: 100
+      }
+    ]
+  },
+
+  "explosion_shockwave": {
+    name: "冲击波",
+    category: "explosion",
+    flash: { color: 0xFFFFFF, size: 15, alpha: 0.8, duration: 60 },
+    fireballs: [
+      { color: 0xFFCC55, maxR: 28, life: 0.35, delay: 0 }
+    ],
+    rings: [
+      { color: 0xFFAA44, maxR: 60, lineWidth: 4, life: 0.25, delay: 0 },
+      { color: 0xFF6622, maxR: 80, lineWidth: 2.5, life: 0.3, delay: 50 },
+      { color: 0xFF4400, maxR: 100, lineWidth: 1.5, life: 0.35, delay: 100 }
+    ],
+    particles: [
+      {
+        count: 25, colors: [0xFF6622, 0xCC4411, 0x993300],
+        speed: { min: 50, max: 120 }, life: { min: 0.3, max: 0.6 },
+        size: { min: 2, max: 5 }, texSharpness: 0.05, texSquare: true,
+        launchOffset: 5, gravity: 0.15, blendMode: 'add', delay: 0
+      }
+    ],
+    trails: [
+      {
+        count: 20, colors: [0xFFDD88, 0xFFCC44],
+        speed: { min: 70, max: 140 }, life: { min: 0.2, max: 0.4 },
+        size: { min: 1, max: 2.5 }, texSharpness: 0.02,
+        launchOffset: 3, gravity: 0.1, blendMode: 'add', delay: 0
+      }
+    ]
+  },
+
+  "explosion_debris": {
+    name: "碎片爆散",
+    category: "explosion",
+    flash: { color: 0xFF8844, size: 10, alpha: 0.6, duration: 40 },
+    fireballs: [],
+    rings: [
+      { color: 0xFF6622, maxR: 30, lineWidth: 2, life: 0.15, delay: 0 }
+    ],
+    particles: [
+      {
+        count: 50, colors: [0xFF4400, 0xFF6622, 0xCC3300, 0x992200, 0xFF8844],
+        speed: { min: 70, max: 170 }, life: { min: 0.5, max: 0.9 },
+        size: { min: 3, max: 8 }, texSharpness: 0.02, texSquare: true,
+        launchOffset: 5, gravity: 0.3, blendMode: 'add', delay: 0
+      }
+    ],
+    trails: [
+      {
+        count: 15, colors: [0xFFFF44, 0xFFCC00],
+        speed: { min: 100, max: 160 }, life: { min: 0.2, max: 0.4 },
+        size: { min: 1, max: 2 }, texSharpness: 0.02,
+        launchOffset: 3, gravity: 0.2, blendMode: 'add', delay: 0
+      },
+      {
+        count: 10, colors: [0x888888, 0x666666],
+        speed: { min: 15, max: 35 }, life: { min: 0.8, max: 1.2 },
+        size: { min: 5, max: 10 }, texSharpness: 0.5,
+        launchOffset: 5, gravity: -0.2, blendMode: 'normal', delay: 50
+      }
+    ]
+  },
+
+  "explosion_nuke": {
+    name: "核爆蘑菇云",
+    category: "explosion",
+    flash: { color: 0xFFFFEE, size: 999, alpha: 0.8, duration: 150, isFull: true },
+    fireballs: [
+      { color: 0xFF8800, maxR: 50, life: 0.8, delay: 0 },
+      { color: 0xFF4400, maxR: 40, life: 1.0, delay: 100, yOffset: -30 }
+    ],
+    rings: [
+      { color: 0xFFDD44, maxR: 100, lineWidth: 6, life: 0.5, delay: 0 },
+      { color: 0xFF8800, maxR: 150, lineWidth: 4, life: 0.6, delay: 200 }
+    ],
+    particles: [
+      {
+        count: 60, colors: [0xFF6622, 0xCC4411, 0x993300],
+        speed: { min: 40, max: 140 }, life: { min: 0.6, max: 1.2 },
+        size: { min: 3, max: 8 }, texSharpness: 0.05, texSquare: true,
+        launchOffset: 5, gravity: 0.2, blendMode: 'add', delay: 0
+      }
+    ],
+    trails: [
+      {
+        count: 40, colors: [0xFFFF44, 0xFFCC00],
+        speed: { min: 90, max: 200 }, life: { min: 0.4, max: 0.7 },
+        size: { min: 2, max: 4 }, texSharpness: 0.05,
+        launchOffset: 5, gravity: 0.1, blendMode: 'add', delay: 0
+      },
+      {
+        count: 30, colors: [0x665544, 0x443322],
+        speed: { min: 20, max: 50 }, life: { min: 1.2, max: 2.0 },
+        size: { min: 8, max: 18 }, texSharpness: 0.5,
+        launchOffset: 10, gravity: -0.4, blendMode: 'normal', delay: 100
+      }
+    ]
+  },
+
+  // === 魔法/特效类 ===
+
+  "magic_fire": {
+    name: "火焰喷射",
+    category: "magic",
+    flash: { color: 0xFF6600, size: 20, alpha: 0.7, duration: 80 },
+    fireballs: [],
+    rings: [
+      { color: 0xFF4400, maxR: 40, lineWidth: 3, life: 0.2, delay: 0 }
+    ],
+    particles: [
+      {
+        count: 80, colors: [0xFF2200, 0xFF4400, 0xFF6600, 0xFF8800, 0xFFAA00, 0xFFCC00, 0xFFEE44],
+        speed: { min: 70, max: 170 }, life: { min: 0.4, max: 1.0 },
+        size: { min: 4, max: 10 }, texSharpness: 0.2,
+        launchOffset: 0, gravity: 0.3, blendMode: 'add', delay: 0,
+        directionCone: { angle: -Math.PI / 2, spread: Math.PI * 0.4 }
+      }
+    ],
+    trails: [
+      {
+        count: 20, colors: [0x555555, 0x444444],
+        speed: { min: 30, max: 70 }, life: { min: 1.2, max: 2.0 },
+        size: { min: 8, max: 15 }, texSharpness: 0.5,
+        launchOffset: 0, gravity: -0.3, blendMode: 'normal', delay: 0,
+        directionCone: { angle: -Math.PI / 2, spread: 0.5 }
+      }
+    ]
+  },
+
+  "magic_ice": {
+    name: "冰霜爆裂",
+    category: "magic",
+    flash: { color: 0xCCDDFF, size: 15, alpha: 0.7, duration: 100 },
+    fireballs: [],
+    rings: [
+      { color: 0x88BBFF, maxR: 60, lineWidth: 4, life: 0.4, delay: 0 },
+      { color: 0xAAEEFF, maxR: 80, lineWidth: 2, life: 0.5, delay: 150 }
+    ],
+    particles: [
+      {
+        count: 50, colors: [0x88CCFF, 0xAAEEFF, 0x66AAEE, 0xCCFFFF, 0x4488DD],
+        speed: { min: 40, max: 100 }, life: { min: 0.6, max: 1.0 },
+        size: { min: 3, max: 6 }, texSharpness: 0.15,
+        launchOffset: 5, gravity: 0.05, blendMode: 'add', delay: 0
+      }
+    ],
+    trails: [
+      {
+        count: 30, colors: [0xFFFFFF, 0xCCDDFF],
+        speed: { min: 20, max: 50 }, life: { min: 1.2, max: 2.0 },
+        size: { min: 1.5, max: 3 }, texSharpness: 0.05,
+        launchOffset: 5, gravity: -0.1, blendMode: 'add', delay: 0
+      },
+      {
+        count: 15, colors: [0x889999, 0x667777],
+        speed: { min: 15, max: 35 }, life: { min: 1.5, max: 2.0 },
+        size: { min: 6, max: 12 }, texSharpness: 0.5,
+        launchOffset: 5, gravity: -0.15, blendMode: 'normal', delay: 100
+      }
+    ]
+  },
+
+  "magic_electric": {
+    name: "电光爆炸",
+    category: "magic",
+    flash: { color: 0xAA88FF, size: 18, alpha: 0.9, duration: 80 },
+    fireballs: [],
+    rings: [
+      { color: 0xCC88FF, maxR: 70, lineWidth: 3, life: 0.3, delay: 0 },
+      { color: 0x8844FF, maxR: 90, lineWidth: 2, life: 0.35, delay: 60 }
+    ],
+    particles: [
+      {
+        count: 50, colors: [0x9966FF, 0xAA88FF, 0x7744EE, 0xCCAAFF],
+        speed: { min: 60, max: 140 }, life: { min: 0.3, max: 0.6 },
+        size: { min: 2, max: 5 }, texSharpness: 0.1,
+        launchOffset: 5, gravity: 0.05, blendMode: 'add', delay: 0
+      }
+    ],
+    trails: [
+      {
+        count: 30, colors: [0xFFFFFF, 0xDDDDFF],
+        speed: { min: 90, max: 170 }, life: { min: 0.15, max: 0.35 },
+        size: { min: 1, max: 2.5 }, texSharpness: 0.02,
+        launchOffset: 5, gravity: 0.1, blendMode: 'add', delay: 0
+      }
+    ],
+    // 闪电线条
+    lightning: { count: 8, maxLength: 120, life: { min: 0.2, max: 0.4 }, color: 0xCCAAFF, lineWidth: 2, steps: 8 }
+  },
+
+  "magic_rainbow": {
+    name: "七彩星爆",
+    category: "magic",
+    flash: { color: 0xFFFFFF, size: 12, alpha: 0.8, duration: 60 },
+    fireballs: [],
+    rings: [
+      { color: 0xFFFFFF, maxR: 55, lineWidth: 2, life: 0.3, delay: 0 }
+    ],
+    // 星爆：每个颜色一个方向束
+    starburst: {
+      colors: [0xFF0044, 0xFF8800, 0xFFDD00, 0x00FF88, 0x0088FF, 0xAA00FF, 0xFF00FF],
+      particlesPerColor: 15,
+      speed: { min: 80, max: 140 },
+      life: { min: 0.4, max: 0.7 },
+      size: { min: 2.5, max: 4 },
+      texSharpness: 0.05,
+      spread: 0.35,
+      delay: 0
+    },
+    trails: [
+      {
+        count: 20, colors: [0xFFDD88, 0xFFCC44],
+        speed: { min: 30, max: 70 }, life: { min: 0.6, max: 1.0 },
+        size: { min: 1.5, max: 3 }, texSharpness: 0.08,
+        launchOffset: 5, gravity: 0.05, blendMode: 'add', delay: 80
+      }
+    ]
+  },
+
+  "magic_smoke": {
+    name: "浓烟",
+    category: "effect",
+    flash: null,
+    fireballs: [],
+    rings: [],
+    particles: [
+      {
+        count: 40, colors: [0x888888, 0x777777, 0x666666],
+        speed: { min: 20, max: 50 }, life: { min: 0.8, max: 1.5 },
+        size: { min: 6, max: 14 }, texSharpness: 0.5,
+        launchOffset: 5, gravity: -0.25, blendMode: 'normal', delay: 0
+      }
+    ],
+    trails: []
+  },
+
+  "magic_sparks": {
+    name: "火花散射",
+    category: "effect",
+    flash: { color: 0xFFFF88, size: 8, alpha: 0.8, duration: 30 },
+    fireballs: [],
+    rings: [],
+    particles: [
+      {
+        count: 100, colors: [0xFFFF88, 0xFFCC44, 0xFF6600],
+        speed: { min: 100, max: 250 }, life: { min: 0.15, max: 0.4 },
+        size: { min: 1, max: 2.5 }, texSharpness: 0.02,
+        launchOffset: 3, gravity: 0.5, blendMode: 'add', delay: 0
+      }
+    ],
+    trails: []
+  },
+
+  // === 环境/氛围类 ===
+
+  "ambient_snow": {
+    name: "飘雪",
+    category: "ambient",
+    flash: null, fireballs: [], rings: [],
+    particles: [],
+    trails: [
+      {
+        count: 5, colors: [0xFFFFFF, 0xCCDDFF],
+        speed: { min: 20, max: 40 }, life: { min: 3, max: 5 },
+        size: { min: 1.5, max: 4 }, texSharpness: 0.1,
+        launchOffset: 0, gravity: 0.1, blendMode: 'add', delay: 0,
+        spawnRect: { x: -200, y: -20, w: 400, h: 10 }
+      }
+    ]
+  },
+
+  "ambient_rain": {
+    name: "下雨",
+    category: "ambient",
+    flash: null, fireballs: [], rings: [],
+    particles: [],
+    trails: [
+      {
+        count: 5, colors: [0x88AAFF, 0x4466AA],
+        speed: { min: 350, max: 450 }, life: { min: 0.4, max: 0.8 },
+        size: { min: 1, max: 2 }, texSharpness: 0.05,
+        launchOffset: 0, gravity: 3, blendMode: 'add', delay: 0,
+        spawnRect: { x: -200, y: -20, w: 400, h: 10 }
+      }
+    ]
+  }
+};
+
+// 预设分类索引（供 AI 自动选择）
+var PRESET_CATEGORIES = {
+  "explosion": ["explosion_fireball", "explosion_shockwave", "explosion_debris", "explosion_nuke"],
+  "magic":    ["magic_fire", "magic_ice", "magic_electric", "magic_rainbow"],
+  "ambient":  ["ambient_snow", "ambient_rain"],
+  "effect":   ["magic_smoke", "magic_sparks"]
+};
+
+// AI 自动选择：根据新闻情绪选择爆炸类型
+function selectExplosionPreset(emotion) {
+  var map = {
+    "tension":    "explosion_fireball",
+    "anger":      "explosion_nuke",
+    "fear":       "explosion_shockwave",
+    "joy":        "magic_rainbow",
+    "sadness":    "magic_ice",
+    "surprise":   "magic_electric",
+    "default":    "explosion_fireball"
+  };
+  return map[emotion] || map.default;
+}
+
+// === 核心发射函数 ===
+function emitPreset(x, y, presetName, ctx) {
+  var preset = PARTICLE_PRESETS[presetName];
+  if (!preset) return;
+  var S = ctx.SCALE;
+  var app = ctx.app;
+  if (!app) return;
+
+  // 纹理缓存
+  if (!ctx._texCache) ctx._texCache = {};
+  if (!ctx._effects) ctx._effects = [];
+  if (!ctx._particles) ctx._particles = [];
+
+  function getTex(r, g, b, sharpness) {
+    var key = r + '_' + g + '_' + b + '_' + (sharpness || 0.15);
+    if (!ctx._texCache[key]) {
+      var c = document.createElement('canvas');
+      var size = Math.round(32 + (sharpness || 0.15) * 32);
+      c.width = size; c.height = size;
+      var tctx = c.getContext('2d');
+      var half = size / 2;
+      var s = sharpness || 0.15;
+      var grad = tctx.createRadialGradient(half, half, 0, half, half, half);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(s * 0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.95)');
+      grad.addColorStop(Math.min(0.6, s * 2), 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
+      grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+      tctx.fillStyle = grad;
+      tctx.fillRect(0, 0, size, size);
+      ctx._texCache[key] = PIXI.Texture.from(c);
+    }
+    return ctx._texCache[key];
+  }
+
+  function hexRgb(hex) {
+    return { r: (hex >> 16) & 0xFF, g: (hex >> 8) & 0xFF, b: hex & 0xFF };
+  }
+
+  // 1. 闪光
+  if (preset.flash) {
+    var f = preset.flash;
+    var flash = new PIXI.Graphics();
+    flash.beginFill(f.color);
+    if (f.isFull) {
+      flash.drawRect(0, 0, app.screen.width, app.screen.height);
+    } else {
+      flash.drawCircle(x, y, f.size * S);
+    }
+    flash.alpha = f.alpha;
+    app.stage.addChild(flash);
+    setTimeout(function() { if (flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, f.duration);
+  }
+
+  // 2. 火球
+  preset.fireballs.forEach(function(fb) {
+    setTimeout(function() {
+      var fbObj = {
+        x: x, y: y + (fb.yOffset || 0), r: 3 * S,
+        maxR: fb.maxR * S, color: fb.color,
+        life: fb.life, maxLife: fb.life,
+        g: new PIXI.Graphics()
+      };
+      app.stage.addChild(fbObj.g);
+      ctx._effects.push(fbObj);
+    }, fb.delay);
+  });
+
+  // 3. 冲击波
+  preset.rings.forEach(function(r) {
+    setTimeout(function() {
+      var ringObj = {
+        x: x, y: y, r: 3 * S,
+        maxR: r.maxR * S, color: r.color, lineWidth: r.lineWidth,
+        life: r.life, maxLife: r.life,
+        g: new PIXI.Graphics()
+      };
+      app.stage.addChild(ringObj.g);
+      ctx._effects.push(ringObj);
+    }, r.delay);
+  });
+
+  // 4. 闪电
+  if (preset.lightning) {
+    var lg = preset.lightning;
+    for (var i = 0; i < lg.count; i++) {
+      var dx = (Math.random() - 0.5) * lg.maxLength * S;
+      var dy = (Math.random() - 0.5) * lg.maxLength * S;
+      var life = lg.life.min + Math.random() * (lg.life.max - lg.life.min);
+      var g = new PIXI.Graphics();
+      g.lineStyle(lg.lineWidth * S, lg.color, 0.9);
+      var steps = lg.steps || 8;
+      var cx = x, cy = y;
+      g.moveTo(cx, cy);
+      for (var j = 1; j <= steps; j++) {
+        var t = j / steps;
+        cx = x + dx * t + (Math.random() - 0.5) * 20 * S;
+        cy = y + dy * t + (Math.random() - 0.5) * 20 * S;
+        g.lineTo(cx, cy);
+      }
+      app.stage.addChild(g);
+      setTimeout(function() { if (g.parent) g.parent.removeChild(g); g.destroy(); }, life * 1000);
+    }
+  }
+
+  // 5. 普通粒子
+  preset.particles.forEach(function(pc) {
+    setTimeout(function() {
+      for (var i = 0; i < pc.count; i++) {
+        var a, sp, sx, sy;
+        if (pc.directionCone) {
+          a = pc.directionCone.angle + (Math.random() - 0.5) * pc.directionCone.spread;
+        } else {
+          a = Math.random() * Math.PI * 2;
+        }
+        sp = (pc.speed.min + Math.random() * (pc.speed.max - pc.speed.min)) * S;
+        var off = (pc.launchOffset || 5) * S;
+        sx = x + Math.cos(a) * off;
+        sy = y + Math.sin(a) * off;
+
+        var col = pc.colors[Math.floor(Math.random() * pc.colors.length)];
+        var c = hexRgb(col);
+        var tex = getTex(c.r, c.g, c.b, pc.texSharpness || 0.15);
+        var life = pc.life.min + Math.random() * (pc.life.max - pc.life.min);
+        var size = pc.size.min + Math.random() * (pc.size.max - pc.size.min);
+        var bm = pc.blendMode === 'normal' ? PIXI.BLEND_MODES.NORMAL : PIXI.BLEND_MODES.ADD;
+
+        var sprite = new PIXI.Sprite(tex);
+        sprite.anchor.set(0.5);
+        sprite.x = sx; sprite.y = sy;
+        sprite.blendMode = bm;
+        app.stage.addChild(sprite);
+
+        ctx._particles.push({
+          sprite: sprite, x: sx, y: sy,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: life, maxLife: life, size: size,
+          gravity: pc.gravity || 0.15,
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 10
+        });
+      }
+    }, pc.delay || 0);
+  });
+
+  // 6. 星爆
+  if (preset.starburst) {
+    var sb = preset.starburst;
+    setTimeout(function() {
+      for (var ci = 0; ci < sb.colors.length; ci++) {
+        var baseA = (ci / sb.colors.length) * Math.PI * 2;
+        var col = sb.colors[ci];
+        var c = hexRgb(col);
+        var tex = getTex(c.r, c.g, c.b, sb.texSharpness || 0.1);
+        for (var i = 0; i < sb.particlesPerColor; i++) {
+          var a = baseA + (Math.random() - 0.5) * sb.spread;
+          var sp = (sb.speed.min + Math.random() * (sb.speed.max - sb.speed.min)) * S;
+          var life = sb.life.min + Math.random() * (sb.life.max - sb.life.min);
+          var size = sb.size.min + Math.random() * (sb.size.max - sb.size.min);
+          var sprite = new PIXI.Sprite(tex);
+          sprite.anchor.set(0.5);
+          sprite.x = x; sprite.y = y;
+          sprite.blendMode = PIXI.BLEND_MODES.ADD;
+          app.stage.addChild(sprite);
+          ctx._particles.push({
+            sprite: sprite, x: x, y: y,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: life, maxLife: life, size: size,
+            gravity: 0.1,
+            rotation: 0, rotSpeed: 0
+          });
+        }
+      }
+    }, sb.delay || 0);
+  }
+
+  // 7. 尾迹/环境粒子 (循环发射)
+  preset.trails.forEach(function(tc) {
+    // 环境粒子持续发射
+    if (tc.spawnRect) {
+      var sr = tc.spawnRect;
+      for (var i = 0; i < tc.count; i++) {
+        var sx = x + sr.x * S + Math.random() * sr.w * S;
+        var sy = y + sr.y * S + Math.random() * sr.h * S;
+        var col = tc.colors[Math.floor(Math.random() * tc.colors.length)];
+        var c = hexRgb(col);
+        var tex = getTex(c.r, c.g, c.b, tc.texSharpness || 0.15);
+        var life = tc.life.min + Math.random() * (tc.life.max - tc.life.min);
+        var size = tc.size.min + Math.random() * (tc.size.max - tc.size.min);
+        var sp = (tc.speed.min + Math.random() * (tc.speed.max - tc.speed.min)) * S;
+        var bm = tc.blendMode === 'normal' ? PIXI.BLEND_MODES.NORMAL : PIXI.BLEND_MODES.ADD;
+        var sprite = new PIXI.Sprite(tex);
+        sprite.anchor.set(0.5);
+        sprite.x = sx; sprite.y = sy;
+        sprite.blendMode = bm;
+        app.stage.addChild(sprite);
+        ctx._particles.push({
+          sprite: sprite, x: sx, y: sy,
+          vx: Math.random() * sp * 2 - sp, vy: sp * 0.5,
+          life: life, maxLife: life, size: size,
+          gravity: tc.gravity || 0.1,
+          rotation: 0, rotSpeed: 0
+        });
+      }
+    } else {
+      // 一次性尾迹
+      setTimeout(function() {
+        for (var i = 0; i < tc.count; i++) {
+          var a = Math.random() * Math.PI * 2;
+          var sp = (tc.speed.min + Math.random() * (tc.speed.max - tc.speed.min)) * S;
+          var off = (tc.launchOffset || 5) * S;
+          var sx = x + Math.cos(a) * off;
+          var sy = y + Math.sin(a) * off;
+          var col = tc.colors[Math.floor(Math.random() * tc.colors.length)];
+          var c = hexRgb(col);
+          var tex = getTex(c.r, c.g, c.b, tc.texSharpness || 0.15);
+          var life = tc.life.min + Math.random() * (tc.life.max - tc.life.min);
+          var size = tc.size.min + Math.random() * (tc.size.max - tc.size.min);
+          var bm = tc.blendMode === 'normal' ? PIXI.BLEND_MODES.NORMAL : PIXI.BLEND_MODES.ADD;
+          var sprite = new PIXI.Sprite(tex);
+          sprite.anchor.set(0.5);
+          sprite.x = sx; sprite.y = sy;
+          sprite.blendMode = bm;
+          app.stage.addChild(sprite);
+          ctx._particles.push({
+            sprite: sprite, x: sx, y: sy,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: life, maxLife: life, size: size,
+            gravity: tc.gravity || 0.1,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 8
+          });
+        }
+      }, tc.delay || 0);
+    }
+  });
+}
+
+// === 更新函数（每帧调用）===
+function updateExplosions(ctx, dt) {
+  var dtS = dt / 60;
+
+  // 更新火球和冲击波
+  for (var i = ctx._effects.length - 1; i >= 0; i--) {
+    var e = ctx._effects[i];
+    e.life -= dtS;
+    if (e.life <= 0) {
+      if (e.g.parent) e.g.parent.removeChild(e.g);
+      e.g.destroy();
+      ctx._effects.splice(i, 1);
+      continue;
+    }
+    var p = 1 - e.life / e.maxLife;
+    if (e.maxR !== undefined && e.lineWidth !== undefined) {
+      // 冲击波
+      e.r = 3 * ctx.SCALE + (e.maxR - 3 * ctx.SCALE) * Math.pow(p, 0.6);
+      var alpha = Math.max(0, 1 - p * p);
+      var lw = e.lineWidth * ctx.SCALE * (1 - p * 0.6);
+      e.g.clear();
+      e.g.lineStyle(lw, e.color, alpha);
+      e.g.drawCircle(e.x, e.y, e.r);
+    } else if (e.maxR !== undefined) {
+      // 火球
+      var rScale = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) * 0.5;
+      e.r = 3 * ctx.SCALE + (e.maxR - 3 * ctx.SCALE) * rScale;
+      var alpha = p < 0.6 ? 0.8 : Math.max(0, 0.8 * (1 - (p - 0.6) / 0.4));
+      e.g.clear();
+      e.g.beginFill(e.color, alpha);
+      e.g.drawCircle(e.x, e.y, e.r);
+      e.g.beginFill(0xFFFFFF, alpha * 0.5 * (1 - p));
+      e.g.drawCircle(e.x, e.y, e.r * 0.4);
+      e.g.endFill();
+    }
+  }
+
+  // 更新粒子
+  for (var i = ctx._particles.length - 1; i >= 0; i--) {
+    var p = ctx._particles[i];
+    p.vy += p.gravity * dtS;
+    p.vx *= 0.98;
+    p.x += p.vx * dtS;
+    p.y += p.vy * dtS;
+    p.life -= dtS;
+    var progress = 1 - (p.life / p.maxLife);
+    var alpha = Math.max(0, p.life / p.maxLife);
+    var scaleBurst = progress < 0.2 ? progress / 0.2 : Math.max(0, 1 - (progress - 0.2) / 0.8);
+    if (p.sprite) {
+      p.sprite.x = p.x;
+      p.sprite.y = p.y;
+      p.sprite.alpha = alpha * 0.9;
+      p.sprite.rotation += p.rotSpeed * dtS;
+      p.sprite.scale.set(p.size * ctx.SCALE * scaleBurst);
+    }
+    if (p.life <= 0) {
+      if (p.sprite && p.sprite.parent) p.sprite.parent.removeChild(p.sprite);
+      if (p.sprite) p.sprite.destroy();
+      ctx._particles.splice(i, 1);
+    }
+  }
+}
+
+// 清理
+function cleanupExplosions(ctx) {
+  for (var i = ctx._effects.length - 1; i >= 0; i--) {
+    var e = ctx._effects[i];
+    if (e.g && e.g.parent) e.g.parent.removeChild(e.g);
+    if (e.g) e.g.destroy();
+  }
+  ctx._effects = [];
+  for (var i = ctx._particles.length - 1; i >= 0; i--) {
+    var p = ctx._particles[i];
+    if (p.sprite && p.sprite.parent) p.sprite.parent.removeChild(p.sprite);
+    if (p.sprite) p.sprite.destroy();
+  }
+  ctx._particles = [];
+}
+
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
