@@ -172,48 +172,53 @@
     var textureCache = {};
     var texCounter = 0;
 
-    // 创建纹理 (r, g, b, softEdge, isSquare)
-    function makeTex(r, g, b, soft, isSquare) {
+    // 创建纹理 (r, g, b, sharpness: 0=最锐利, 1=最柔和, isSquare=方形碎片)
+    function makeTex(r, g, b, sharpness, isSquare) {
       var c = document.createElement('canvas');
-      c.width = 64; c.height = 64;
-      var ctx = c.getContext('2d');
-      var s = soft || 0.3;
-
+      var s = sharpness || 0.15;
+      
       if (isSquare) {
         // 方形碎片
+        c.width = 32; c.height = 32;
+        var ctx = c.getContext('2d');
         ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',1)';
-        ctx.fillRect(16, 16, 32, 32);
+        ctx.fillRect(8, 8, 16, 16);
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fillRect(20, 20, 24, 24);
+        ctx.fillRect(10, 10, 12, 12);
       } else {
-        var grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        // 圆形光点
+        var size = Math.round(32 + s * 32);
+        c.width = size; c.height = size;
+        var ctx = c.getContext('2d');
+        var half = size / 2;
+        var grad = ctx.createRadialGradient(half, half, 0, half, half, half);
         grad.addColorStop(0, 'rgba(255,255,255,1)');
-        grad.addColorStop(s, 'rgba(' + r + ',' + g + ',' + b + ',0.95)');
-        grad.addColorStop(0.7, 'rgba(' + r + ',' + g + ',' + b + ',0.4)');
+        grad.addColorStop(s * 0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.95)');
+        grad.addColorStop(Math.min(0.6, s * 2), 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
         grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 64, 64);
+        ctx.fillRect(0, 0, size, size);
       }
       return PIXI.Texture.from(c);
     }
 
     // 获取或创建纹理（带缓存）
-    function getTex(r, g, b, soft, isSquare) {
-      var key = r + '_' + g + '_' + b + '_' + (soft || 0.3) + '_' + (isSquare ? 's' : 'r');
+    function getTex(r, g, b, sharpness, isSquare) {
+      var key = r + '_' + g + '_' + b + '_' + (sharpness || 0.15) + '_' + (isSquare ? 's' : 'r');
       if (!textureCache[key]) {
-        textureCache[key] = makeTex(r, g, b, soft, isSquare);
+        textureCache[key] = makeTex(r, g, b, sharpness, isSquare);
       }
       return textureCache[key];
     }
 
     // 预置基础纹理
-    var texFire = getTex(255, 100, 30, 0.3);
-    var texSpark = getTex(255, 255, 200, 0.1);
-    var texSmoke = getTex(80, 80, 80, 0.5);
-    var texDebris = getTex(200, 50, 0, 0.2, true);
-    var texIce = getTex(100, 200, 255, 0.3);
-    var texElectric = getTex(150, 100, 255, 0.15);
-    var texGold = getTex(255, 215, 0, 0.2);
+    var texFire = getTex(255, 100, 30, 0.2);
+    var texSpark = getTex(255, 255, 200, 0.05);
+    var texSmoke = getTex(80, 80, 80, 0.6);
+    var texDebris = getTex(200, 50, 0, 0.05, true);
+    var texIce = getTex(100, 200, 255, 0.15);
+    var texElectric = getTex(150, 100, 255, 0.1);
+    var texGold = getTex(255, 215, 0, 0.1);
 
     // === 粒子类 ===
     function Particle(x, y, vx, vy, life, tex, size, gravity, blendMode) {
@@ -314,31 +319,43 @@
     // ============ 8 种爆炸效果 ============
 
     function effect1(x, y) { // 经典烟花
+      // 阶段1: 中心闪光（瞬间白色亮点）
       var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
-      flash.drawCircle(x, y, 12 * SCALE); flash.alpha = 0.9;
+      flash.drawCircle(x, y, 8 * SCALE); flash.alpha = 0.9;
       app.stage.addChild(flash);
-      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 50);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 40);
 
-      effects.push(new Fireball(x, y, 22 * SCALE, 0xFFAA33, 0.25));
-      effects.push(new Ring(x, y, 50 * SCALE, 0xFFDD88, 3, 0.2));
+      // 阶段2: 小火球（迅速消散）
+      effects.push(new Fireball(x, y, 15 * SCALE, 0xFFAA33, 0.15));
+      effects.push(new Ring(x, y, 35 * SCALE, 0xFFDD88, 2, 0.15));
 
-      // ★ 真正的彩色粒子散射
+      // 阶段3: 彩色粒子延迟出现，从火球边缘出发（不重叠在中心）
       var colors = [0xFF2244, 0xFF6600, 0xFFAA00, 0xFFDD00, 0xFFFF44, 0x44FF44, 0x4488FF, 0xFF44AA];
-      for (var i = 0; i < 60; i++) {
-        var a = Math.random() * Math.PI * 2;
-        var sp = (5 + Math.random() * 12) * SCALE;
-        var col = colors[Math.floor(Math.random() * colors.length)];
-        var c = hexRgb(col);
-        var tex = getTex(c.r, c.g, c.b, 0.15);
-        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 2, 0.6 + Math.random() * 0.5, tex, 2 + Math.random() * 4);
-      }
+      var colorCount = colors.length;
+      setTimeout(function() {
+        for (var i = 0; i < 50; i++) {
+          var a = Math.random() * Math.PI * 2;
+          var sp = (6 + Math.random() * 12) * SCALE;
+          var col = colors[i % colorCount];
+          var c = hexRgb(col);
+          var tex = getTex(c.r, c.g, c.b, 0.08);
+          // 从火球边缘出发（不是从中心）
+          var startX = x + Math.cos(a) * 12 * SCALE;
+          var startY = y + Math.sin(a) * 12 * SCALE;
+          emitP(startX, startY, Math.cos(a) * sp, Math.sin(a) * sp, 0.5 + Math.random() * 0.4, tex, 1.5 + Math.random() * 2.5);
+        }
+      }, 50);
 
-      // 金色尾迹
-      for (var i = 0; i < 25; i++) {
-        var a = Math.random() * Math.PI * 2;
-        var sp = (3 + Math.random() * 6) * SCALE;
-        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.8 + Math.random() * 0.4, texGold, 1.5 + Math.random() * 2.5, 0.1);
-      }
+      // 阶段4: 金色尾迹延迟出现
+      setTimeout(function() {
+        for (var i = 0; i < 20; i++) {
+          var a = Math.random() * Math.PI * 2;
+          var sp = (2 + Math.random() * 5) * SCALE;
+          var startX = x + Math.cos(a) * 20 * SCALE;
+          var startY = y + Math.sin(a) * 20 * SCALE;
+          emitP(startX, startY, Math.cos(a) * sp, Math.sin(a) * sp - 1, 0.6 + Math.random() * 0.4, texGold, 1 + Math.random() * 1.5, 0.08);
+        }
+      }, 120);
     }
 
     function effect2(x, y) { // 冲击波
