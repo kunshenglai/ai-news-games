@@ -51,7 +51,7 @@
     <div class="news">📰 突发: 特朗普在白宫晚宴遭枪击</div>
     <div class="start-btn" id="start-btn">立即行动</div>
   </div>
-  <div id="version">v5.1.0 - Shockwave</div>
+  <div id="version">v5.2.0 - Shockwave</div>
 
   <script>
   (function() {
@@ -64,11 +64,6 @@
     var app = null;
     var particles = [];
     var particleTextures = {};
-    // 预设系统变量（提前声明避免作用域问题）
-    var texCache = {};
-    var _effects = [];
-    var _presetSprites = [];
-    var makePresetTex, emitPreset, updateEffects, updatePresetSprites;
     var gameActive = false;
     var gameStarted = false;
     var score = 0, combo = 0, maxCombo = 0, missed = 0;
@@ -103,17 +98,22 @@
 
     var CONFIG = {
       gameDuration: 45,
-      spawnRate: { base: 0.8, max: 2.0, curve: 1.5 },
+      spawnRate: { base: 1.2, max: 4.0, curve: 1.8 },
       maxOnScreen: 12,
       types: { start: 3, max: 6, increaseAt: [0.25, 0.5, 0.75] },
       tapScore: 15,
       comboMultiplier: 0.3,
       maxCombo: 10,
-      missLimit: 15,
-      threatSpeed: { base: 0.006, variance: 0.002 }
+      missLimit: 8,
+      threatSpeed: { base: 0.010, variance: 0.004 }
     };
     var THREAT_COLORS = ['#CC2200', '#DD4400', '#EE6600', '#AA0000', '#DD8800'];
     var PALETTE = { building: '#1a1218', buildingLight: '#2a2028' };
+
+    // 预设系统变量（在 try 外部声明，确保函数可访问）
+    var texCache = {};
+    var _effects = [];
+    var _presetSprites = [];
 
     if (typeof PIXI !== 'undefined') {
       try {
@@ -174,7 +174,7 @@
           sparkGravity: 0.1
         };
 
-        makePresetTex = function(r, g, b, sharpness) {
+        function makePresetTex(r, g, b, sharpness) {
           var key = r + '_' + g + '_' + b + '_' + (sharpness || 0.15);
           if (!texCache[key]) {
             var c = document.createElement('canvas');
@@ -196,7 +196,7 @@
         }
 
         // === 预设驱动的爆炸发射 ===
-        emitPreset = function(x, y) {
+        function emitPreset(x, y) {
           var preset = SHOCKWAVE_PRESET;
           var S = SCALE;
           if (!app || !app.stage) return;
@@ -298,12 +298,11 @@
           }
         }
 
-        // updateEffects and updatePresetSprites moved below try block
-      } catch (e) { setVersion('Pixi Error'); }
+        // updateEffects and updatePresetSprites moved below try block      } catch (e) { setVersion('Pixi Error'); }
     } else { setVersion('PixiJS CDN Failed'); }
 
         // 预设效果对象更新
-        updateEffects = function(dt) {
+        function updateEffects(dt) {
           var dtS = dt / 60;
           for (var i = _effects.length - 1; i >= 0; i--) {
             var e = _effects[i];
@@ -337,7 +336,7 @@
         }
 
         // 预设精灵更新
-        updatePresetSprites = function(dt) {
+        function updatePresetSprites(dt) {
           var dtS = dt / 60;
           for (var i = _presetSprites.length - 1; i >= 0; i--) {
             var p = _presetSprites[i];
@@ -418,11 +417,15 @@
       this.life -= dtS;
       if (this.life <= 0) { this.g.destroy(); return false; }
       var p = 1 - this.life / this.maxLife;
-      this.r = 5 * SCALE + (this.maxR - 5 * SCALE) * Math.pow(p, 0.6);
-      var alpha = Math.max(0, 1 - p * p);
-      var lw = this.lineWidth * (1 - p * 0.7);
+      // 从 1px 瞬间爆开，ease-out-expo 曲线：前 20% 达到 80% 最大半径
+      this.r = 1 * SCALE + (this.maxR - 1 * SCALE) * (1 - Math.pow(1 - p, 3));
+      // 线宽从粗到细，模拟冲击波扩散变薄
+      var lw = this.lineWidth * (1 - p * 0.8);
+      // alpha 先升后降：爆发时最亮，扩散后消散
+      var alpha = p < 0.15 ? p / 0.15 : Math.max(0, 1 - (p - 0.15) / 0.85);
+      alpha *= 0.9;
       this.g.clear();
-      this.g.lineStyle(lw, this.color, alpha);
+      this.g.lineStyle(Math.max(0.5, lw), this.color, alpha);
       this.g.drawCircle(this.x, this.y, this.r);
       return true;
     };
@@ -440,10 +443,13 @@
       this.life -= dtS;
       if (this.life <= 0) { this.g.destroy(); return false; }
       var p = 1 - this.life / this.maxLife;
-      // 先膨胀到最大，再碎裂消散
-      var rScale = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) * 0.5;
-      this.r = 3 * SCALE + (this.maxR - 3 * SCALE) * rScale;
-      var alpha = p < 0.6 ? 0.8 : Math.max(0, 0.8 * (1 - (p - 0.6) / 0.4));
+      // 火球核心：从 2px 瞬间爆开到最大，30% 后开始碎裂收缩
+      if (p < 0.3) {
+        this.r = 2 * SCALE + (this.maxR - 2 * SCALE) * (1 - Math.pow(1 - p / 0.3, 3));
+      } else {
+        this.r = this.maxR * Math.max(0.2, 1 - (p - 0.3) * 1.5);
+      }
+      var alpha = p < 0.5 ? 0.9 : Math.max(0, 0.9 * (1 - (p - 0.5) / 0.5));
       // 解析颜色
       var r = (this.color >> 16) & 0xFF, g = (this.color >> 8) & 0xFF, b = this.color & 0xFF;
       this.g.clear();
@@ -746,7 +752,7 @@
       requestAnimationFrame(loop);
     }
 
-    setVersion('冲击波爆炸 v5.1.0');
+    setVersion('冲击波爆炸 v5.2.0');
     requestAnimationFrame(loop);
   })();
   </script>
