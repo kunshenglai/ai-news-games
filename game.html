@@ -51,7 +51,7 @@
     <div class="news">📰 突发: 特朗普在白宫晚宴遭枪击</div>
     <div class="start-btn" id="start-btn">立即行动</div>
   </div>
-  <div id="version">v5.4.0 - Shockwave</div>
+  <div id="version">v5.4.1 - Shockwave</div>
 
   <script>
   (function() {
@@ -749,6 +749,10 @@
       e.preventDefault(); e.stopPropagation();
       gameStarted = true; restartGame();
     });
+    startBtn.addEventListener('touchend', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      gameStarted = true; restartGame();
+    });
 
     bgCanvas.addEventListener('touchstart', function(e) {
       e.preventDefault();
@@ -826,7 +830,7 @@
       requestAnimationFrame(loop);
     }
 
-    setVersion('冲击波爆炸 v5.4.0');
+    setVersion('冲击波爆炸 v5.4.1');
     requestAnimationFrame(loop);
   })();
   </script>
