@@ -63,11 +63,11 @@
     var W = 0, H = 0, SCALE = 1;
     var app = null;
     var particles = [];
-    var particleTextures = {};
     // 预设系统函数声明（提前声明避免作用域问题）
-    var texCache, _effects, _presetSprites;
+    var texCache = {};
+    var _effects = [];
+    var _presetSprites = [];
     var makePresetTex, emitPreset, updateEffects, updatePresetSprites;
-    var particleTextures = {};
     var gameActive = false;
     var gameStarted = false;
     var score = 0, combo = 0, maxCombo = 0, missed = 0;
