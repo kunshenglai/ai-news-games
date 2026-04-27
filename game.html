@@ -64,6 +64,10 @@
     var app = null;
     var particles = [];
     var particleTextures = {};
+    // 预设系统函数声明（提前声明避免作用域问题）
+    var texCache, _effects, _presetSprites;
+    var makePresetTex, emitPreset, updateEffects, updatePresetSprites;
+    var particleTextures = {};
     var gameActive = false;
     var gameStarted = false;
     var score = 0, combo = 0, maxCombo = 0, missed = 0;
@@ -109,11 +113,6 @@
     };
     var THREAT_COLORS = ['#CC2200', '#DD4400', '#EE6600', '#AA0000', '#DD8800'];
     var PALETTE = { building: '#1a1218', buildingLight: '#2a2028' };
-
-    // 预设系统变量（在 try 外部声明，确保函数可访问）
-    var texCache = {};
-    var _effects = [];
-    var _presetSprites = [];
 
     if (typeof PIXI !== 'undefined') {
       try {
@@ -174,7 +173,7 @@
           sparkGravity: 0.1
         };
 
-        function makePresetTex(r, g, b, sharpness) {
+        makePresetTex = function(r, g, b, sharpness) {
           var key = r + '_' + g + '_' + b + '_' + (sharpness || 0.15);
           if (!texCache[key]) {
             var c = document.createElement('canvas');
@@ -196,7 +195,7 @@
         }
 
         // === 预设驱动的爆炸发射 ===
-        function emitPreset(x, y) {
+        emitPreset = function(x, y) {
           var preset = SHOCKWAVE_PRESET;
           var S = SCALE;
           if (!app || !app.stage) return;
@@ -302,7 +301,7 @@
     } else { setVersion('PixiJS CDN Failed'); }
 
         // 预设效果对象更新
-        function updateEffects(dt) {
+        updateEffects = function(dt) {
           var dtS = dt / 60;
           for (var i = _effects.length - 1; i >= 0; i--) {
             var e = _effects[i];
@@ -336,7 +335,7 @@
         }
 
         // 预设精灵更新
-        function updatePresetSprites(dt) {
+        updatePresetSprites = function(dt) {
           var dtS = dt / 60;
           for (var i = _presetSprites.length - 1; i >= 0; i--) {
             var p = _presetSprites[i];
