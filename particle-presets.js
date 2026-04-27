@@ -57,7 +57,7 @@ var PARTICLE_PRESETS = {
       {
         count: 25, colors: [0xFF6622, 0xCC4411, 0x993300],
         speed: { min: 50, max: 120 }, life: { min: 0.3, max: 0.6 },
-        size: { min: 2, max: 5 }, texSharpness: 0.05, texSquare: true,
+        size: { min: 3, max: 6 }, texSharpness: 0.05, texSquare: true,
         launchOffset: 5, gravity: 0.15, blendMode: 'add', delay: 0
       }
     ],
@@ -65,7 +65,7 @@ var PARTICLE_PRESETS = {
       {
         count: 20, colors: [0xFFDD88, 0xFFCC44],
         speed: { min: 70, max: 140 }, life: { min: 0.2, max: 0.4 },
-        size: { min: 1, max: 2.5 }, texSharpness: 0.02,
+        size: { min: 2, max: 4 }, texSharpness: 0.02,
         launchOffset: 3, gravity: 0.1, blendMode: 'add', delay: 0
       }
     ]
@@ -368,7 +368,8 @@ function emitPreset(x, y, presetName, ctx) {
     var key = r + '_' + g + '_' + b + '_' + (sharpness || 0.15);
     if (!ctx._texCache[key]) {
       var c = document.createElement('canvas');
-      var size = Math.round(32 + (sharpness || 0.15) * 32);
+      // 增大纹理基础尺寸
+      var size = Math.round(48 + (sharpness || 0.15) * 48);
       c.width = size; c.height = size;
       var tctx = c.getContext('2d');
       var half = size / 2;
