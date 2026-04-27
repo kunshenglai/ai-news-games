@@ -247,6 +247,7 @@ var PARTICLE_PRESETS = {
     rings: [
       { color: 0xFFFFFF, maxR: 55, lineWidth: 2, life: 0.3, delay: 0 }
     ],
+    particles: [],
     // 星爆：每个颜色一个方向束
     starburst: {
       colors: [0xFF0044, 0xFF8800, 0xFFDD00, 0x00FF88, 0x0088FF, 0xAA00FF, 0xFF00FF],
@@ -372,6 +373,12 @@ function emitPreset(x, y, presetName, ctx) {
   if (!ctx._effects) ctx._effects = [];
   if (!ctx._particles) ctx._particles = [];
 
+  // 安全缺省值：确保所有数组都存在
+  var fireballs = preset.fireballs || [];
+  var rings = preset.rings || [];
+  var particles = preset.particles || [];
+  var trails = preset.trails || [];
+
   function getTex(r, g, b, sharpness) {
     var key = r + '_' + g + '_' + b + '_' + (sharpness || 0.15);
     if (!ctx._texCache[key]) {
@@ -414,7 +421,7 @@ function emitPreset(x, y, presetName, ctx) {
   }
 
   // 2. 火球
-  preset.fireballs.forEach(function(fb) {
+  fireballs.forEach(function(fb) {
     setTimeout(function() {
       var fbObj = {
         x: x, y: y + (fb.yOffset || 0), r: 3 * S,
@@ -428,7 +435,7 @@ function emitPreset(x, y, presetName, ctx) {
   });
 
   // 3. 冲击波
-  preset.rings.forEach(function(r) {
+  rings.forEach(function(r) {
     setTimeout(function() {
       var ringObj = {
         x: x, y: y, r: 3 * S,
@@ -465,7 +472,7 @@ function emitPreset(x, y, presetName, ctx) {
   }
 
   // 5. 普通粒子
-  preset.particles.forEach(function(pc) {
+  particles.forEach(function(pc) {
     setTimeout(function() {
       for (var i = 0; i < pc.count; i++) {
         var a, sp, sx, sy;
@@ -536,7 +543,7 @@ function emitPreset(x, y, presetName, ctx) {
   }
 
   // 7. 尾迹/环境粒子 (循环发射)
-  preset.trails.forEach(function(tc) {
+  trails.forEach(function(tc) {
     // 环境粒子持续发射
     if (tc.spawnRect) {
       var sr = tc.spawnRect;
