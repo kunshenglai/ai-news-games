@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>💥 粒子效果实验室</title>
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pixi-particles@4.3.1/dist/pixi-particles.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -68,6 +67,15 @@
       font-size: 10px;
       margin-right: 4px;
     }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-size: 9px;
+      margin-left: 4px;
+      background: #FF6B3533;
+      color: #FF6B35;
+    }
     #pixi-container {
       position: fixed;
       top: 0; left: 0;
@@ -125,28 +133,6 @@
       font-weight: 600;
     }
     .auto-toggle:hover { border-color: #FFD700; color: #FFD700; }
-    .badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 8px;
-      font-size: 9px;
-      margin-left: 4px;
-      background: #FF6B3533;
-      color: #FF6B35;
-    }
-    .status-bar {
-      position: fixed;
-      bottom: 100px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 100;
-      background: #1a1a2ecc;
-      padding: 6px 16px;
-      border-radius: 12px;
-      border: 1px solid #333;
-      font-size: 12px;
-      color: #aaa;
-    }
   </style>
 </head>
 <body>
@@ -155,7 +141,7 @@
 
   <div class="header">
     <h1>💥 粒子效果实验室</h1>
-    <p>基于 @pixi/particle 官方配置 · 点击屏幕触发</p>
+    <p>JSON 配置驱动 · 点击屏幕触发</p>
   </div>
 
   <div class="controls" id="controls"></div>
@@ -177,12 +163,20 @@
     });
     document.getElementById('pixi-container').appendChild(app.view);
 
+    // === 爆炸上下文 (被 particle-presets.js 使用) ===
+    var explosionCtx = {
+      app: app,
+      SCALE: SCALE,
+      _effects: [],
+      _particles: [],
+      _texCache: {}
+    };
+
     var currentPreset = 'explosion_fireball';
     var autoDemo = true;
     var autoTimer = 0;
-    var activeEmitters = [];
 
-    // 生成按钮
+    // 预设列表
     var presetList = [
       { key: 'explosion_fireball', label: '火球爆炸', tag: '爆炸' },
       { key: 'explosion_shockwave', label: '冲击波', tag: '爆炸' },
@@ -198,6 +192,7 @@
       { key: 'ambient_rain', label: '下雨', tag: '环境' }
     ];
 
+    // 生成按钮
     var controlsDiv = document.getElementById('controls');
     presetList.forEach(function(p, i) {
       var btn = document.createElement('button');
@@ -208,88 +203,23 @@
       controlsDiv.appendChild(btn);
     });
 
-    // 创建粒子纹理
-    var particleTextures = {};
-    function makeTex(r, g, b, soft) {
-      var c = document.createElement('canvas');
-      var size = Math.round(32 + (soft || 0.15) * 32);
-      c.width = size; c.height = size;
-      var ctx = c.getContext('2d');
-      var half = size / 2;
-      var s = soft || 0.15;
-      var grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-      grad.addColorStop(0, 'rgba(255,255,255,1)');
-      grad.addColorStop(s * 0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.95)');
-      grad.addColorStop(Math.min(0.6, s * 2), 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
-      grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, size, size);
-      return PIXI.Texture.from(c);
-    }
-
-    // 常用纹理
-    var texDefault = makeTex(255, 200, 100, 0.15);
-    var texSpark = makeTex(255, 255, 200, 0.05);
-    var texSmoke = makeTex(100, 100, 100, 0.5);
-
     function setPreset(key) {
       currentPreset = key;
       var btns = document.querySelectorAll('.ctrl-btn');
       for (var i = 0; i < btns.length; i++) {
         btns[i].classList.toggle('active', i === presetList.findIndex(function(p) { return p.key === key; }));
       }
-      // 更新标题
       var name = presetList.find(function(p) { return p.key === key; });
-      document.getElementById('effectName').textContent = (name ? name.label : key) +
-        ' | ' + PRESET_CATEGORIES[key] ? '' : '';
-
-      // 显示分类
-      for (var cat in PRESET_CATEGORIES) {
-        if (PRESET_CATEGORIES[cat].indexOf(key) >= 0) {
-          document.getElementById('effectName').textContent += ' [' + cat + ']';
-          break;
-        }
+      var cat = '';
+      for (var c in PRESET_CATEGORIES) {
+        if (PRESET_CATEGORIES[c].indexOf(key) >= 0) { cat = ' [' + c + ']'; break; }
       }
+      document.getElementById('effectName').textContent = (name ? name.label : key) + cat;
     }
 
     // 触发爆炸
     function triggerExplosion(x, y) {
-      var config = PARTICLE_PRESETS[currentPreset];
-      if (!config) return;
-
-      // 深拷贝配置
-      var cfg = JSON.parse(JSON.stringify(config));
-
-      // 选择纹理
-      var tex;
-      if (currentPreset.indexOf('smoke') >= 0) {
-        tex = texSmoke;
-      } else if (currentPreset.indexOf('snow') >= 0 || currentPreset.indexOf('rain') >= 0) {
-        tex = texSpark;
-      } else {
-        tex = texDefault;
-      }
-
-      // v4: new Emitter(parent, particleImages, config)
-      var emitter = new PIXI.particles.Emitter(app.stage, [tex], {
-        lifetime: cfg.lifetime,
-        frequency: cfg.frequency,
-        emitterLifetime: cfg.emitterLifetime,
-        maxParticles: cfg.maxParticles,
-        pos: { x: x, y: y },
-        behaviors: cfg.behaviors
-      });
-
-      emitter.emit = true;
-      activeEmitters.push(emitter);
-
-      // 自动清理
-      var cleanupTime = (cfg.emitterLifetime + cfg.lifetime.max) * 1000 + 500;
-      setTimeout(function() {
-        emitter.destroy();
-        var idx = activeEmitters.indexOf(emitter);
-        if (idx >= 0) activeEmitters.splice(idx, 1);
-      }, cleanupTime);
+      emitPreset(x, y, currentPreset, explosionCtx);
     }
 
     // 点击触发
@@ -303,28 +233,27 @@
       document.getElementById('autoBtn').textContent = autoDemo ? '🎯 自动演示: 开' : '🎯 自动演示: 关';
     }
 
-    // 自动演示逻辑（在 ticker 中调用）
+    // resize
+    window.addEventListener('resize', function() {
+      W = window.innerWidth; H = window.innerHeight;
+      SCALE = Math.min(W, H) / 800;
+      explosionCtx.SCALE = SCALE;
+      app.renderer.resize(W, H);
+    });
+
+    // 游戏循环
     app.ticker.add(function(delta) {
-      var dt = delta / 60;
-      for (var i = activeEmitters.length - 1; i >= 0; i--) {
-        activeEmitters[i].update(dt);
-      }
+      updateExplosions(explosionCtx, delta);
+
       if (autoDemo) {
-        autoTimer += dt;
-        if (autoTimer > 0.8) {
+        autoTimer += delta;
+        if (autoTimer > 50) {
           autoTimer = 0;
           var cx = W * 0.2 + Math.random() * W * 0.6;
           var cy = H * 0.2 + Math.random() * H * 0.5;
           triggerExplosion(cx, cy);
         }
       }
-    });
-
-    // resize
-    window.addEventListener('resize', function() {
-      W = window.innerWidth; H = window.innerHeight;
-      SCALE = Math.min(W, H) / 800;
-      app.renderer.resize(W, H);
     });
 
     setPreset('explosion_fireball');
