@@ -917,9 +917,9 @@ function cleanupExplosions(ctx) {
       updateExplosions(explosionCtx, delta);
 
       if (autoDemo) {
-        autoTimer += delta;
-        if (autoTimer > 50) {
-          autoTimer = 0;
+        window._autoTick = (window._autoTick || 0) + delta;
+        if (window._autoTick > 50) {
+          window._autoTick = 0;
           var cx = W * 0.2 + Math.random() * W * 0.6;
           var cy = H * 0.2 + Math.random() * H * 0.5;
           triggerExplosion(cx, cy);
