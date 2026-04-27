@@ -51,7 +51,7 @@
     <div class="news">📰 突发: 特朗普在白宫晚宴遭枪击</div>
     <div class="start-btn" id="start-btn">立即行动</div>
   </div>
-  <div id="version">v5.0.0 - Testing...</div>
+  <div id="version">v5.1.0 - Shockwave</div>
 
   <script>
   (function() {
@@ -137,6 +137,224 @@
         particleTextures.spark = makeTex(255, 255, 200);
         particleTextures.smoke = makeTex(80, 80, 80);
         particleTextures.debris = makeTex(200, 50, 0);
+
+        // 纹理缓存（用于预设系统动态纹理）
+        var texCache = {};
+        var _effects = []; // 存储预设系统的火球/冲击波对象
+        var _presetSprites = []; // 存储预设系统的粒子精灵
+
+        // 冲击波预设配置
+        var SHOCKWAVE_PRESET = {
+          name: "冲击波",
+          flash: { color: 0xFFFFFF, size: 15, alpha: 0.8, duration: 60 },
+          fireballs: [
+            { color: 0xFFCC55, maxR: 28, life: 0.35, delay: 0 }
+          ],
+          rings: [
+            { color: 0xFFAA44, maxR: 60, lineWidth: 4, life: 0.25, delay: 0 },
+            { color: 0xFF6622, maxR: 80, lineWidth: 2.5, life: 0.30, delay: 50 },
+            { color: 0xFF4400, maxR: 100, lineWidth: 1.5, life: 0.35, delay: 100 }
+          ],
+          debrisCount: 25,
+          debrisColors: [0xFF6622, 0xCC4411, 0x993300],
+          debrisSpeed: { min: 50, max: 120 },
+          debrisLife: { min: 0.3, max: 0.6 },
+          debrisSize: { min: 3, max: 6 },
+          debrisSharpness: 0.05,
+          sparkCount: 20,
+          sparkColors: [0xFFDD88, 0xFFCC44],
+          sparkSpeed: { min: 70, max: 140 },
+          sparkLife: { min: 0.2, max: 0.4 },
+          sparkSize: { min: 2, max: 4 },
+          sparkSharpness: 0.02,
+          launchOffset: 5,
+          debrisGravity: 0.15,
+          sparkGravity: 0.1
+        };
+
+        function makePresetTex(r, g, b, sharpness) {
+          var key = r + '_' + g + '_' + b + '_' + (sharpness || 0.15);
+          if (!texCache[key]) {
+            var c = document.createElement('canvas');
+            var size = Math.round(48 + (sharpness || 0.15) * 48);
+            c.width = size; c.height = size;
+            var tctx = c.getContext('2d');
+            var half = size / 2;
+            var s = sharpness || 0.15;
+            var grad = tctx.createRadialGradient(half, half, 0, half, half, half);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(s * 0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.95)');
+            grad.addColorStop(Math.min(0.6, s * 2), 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
+            grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+            tctx.fillStyle = grad;
+            tctx.fillRect(0, 0, size, size);
+            texCache[key] = PIXI.Texture.from(c);
+          }
+          return texCache[key];
+        }
+
+        // === 预设驱动的爆炸发射 ===
+        function emitPreset(x, y) {
+          var preset = SHOCKWAVE_PRESET;
+          var S = SCALE;
+          if (!app || !app.stage) return;
+
+          // 闪光
+          var flash = new PIXI.Graphics();
+          flash.beginFill(preset.flash.color);
+          flash.drawCircle(x, y, preset.flash.size * S);
+          flash.alpha = preset.flash.alpha;
+          app.stage.addChild(flash);
+          setTimeout(function() {
+            if (flash.parent) flash.parent.removeChild(flash);
+            flash.destroy();
+          }, preset.flash.duration);
+
+          // 火球
+          preset.fireballs.forEach(function(fb) {
+            setTimeout(function() {
+              var fbObj = {
+                type: 'fireball', x: x, y: y, r: 3 * S,
+                maxR: fb.maxR * S, color: fb.color,
+                life: fb.life, maxLife: fb.life,
+                g: new PIXI.Graphics()
+              };
+              app.stage.addChild(fbObj.g);
+              _effects.push(fbObj);
+            }, fb.delay);
+          });
+
+          // 冲击波环
+          preset.rings.forEach(function(r) {
+            setTimeout(function() {
+              var ringObj = {
+                type: 'ring', x: x, y: y, r: 3 * S,
+                maxR: r.maxR * S, color: r.color, lineWidth: r.lineWidth,
+                life: r.life, maxLife: r.life,
+                g: new PIXI.Graphics()
+              };
+              app.stage.addChild(ringObj.g);
+              _effects.push(ringObj);
+            }, r.delay);
+          });
+
+          // 碎片粒子（从边缘发射）
+          for (var i = 0; i < preset.debrisCount; i++) {
+            var a = Math.random() * Math.PI * 2;
+            var sp = (preset.debrisSpeed.min + Math.random() * (preset.debrisSpeed.max - preset.debrisSpeed.min)) * S;
+            var off = preset.launchOffset * S;
+            var sx = x + Math.cos(a) * off;
+            var sy = y + Math.sin(a) * off;
+            var col = preset.debrisColors[Math.floor(Math.random() * preset.debrisColors.length)];
+            var cr = (col >> 16) & 0xFF, cg = (col >> 8) & 0xFF, cb = col & 0xFF;
+            var tex = makePresetTex(cr, cg, cb, preset.debrisSharpness);
+            var life = preset.debrisLife.min + Math.random() * (preset.debrisLife.max - preset.debrisLife.min);
+            var size = preset.debrisSize.min + Math.random() * (preset.debrisSize.max - preset.debrisSize.min);
+
+            var sprite = new PIXI.Sprite(tex);
+            sprite.anchor.set(0.5);
+            sprite.x = sx; sprite.y = sy;
+            sprite.blendMode = PIXI.BLEND_MODES.ADD;
+            app.stage.addChild(sprite);
+
+            _presetSprites.push({
+              sprite: sprite, x: sx, y: sy,
+              vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+              life: life, maxLife: life, size: size,
+              gravity: preset.debrisGravity,
+              rotation: Math.random() * Math.PI * 2,
+              rotSpeed: (Math.random() - 0.5) * 10
+            });
+          }
+
+          // 火花粒子
+          for (var i = 0; i < preset.sparkCount; i++) {
+            var a = Math.random() * Math.PI * 2;
+            var sp = (preset.sparkSpeed.min + Math.random() * (preset.sparkSpeed.max - preset.sparkSpeed.min)) * S;
+            var off = (preset.launchOffset - 2) * S;
+            var sx = x + Math.cos(a) * off;
+            var sy = y + Math.sin(a) * off;
+            var col = preset.sparkColors[Math.floor(Math.random() * preset.sparkColors.length)];
+            var cr = (col >> 16) & 0xFF, cg = (col >> 8) & 0xFF, cb = col & 0xFF;
+            var tex = makePresetTex(cr, cg, cb, preset.sparkSharpness);
+            var life = preset.sparkLife.min + Math.random() * (preset.sparkLife.max - preset.sparkLife.min);
+            var size = preset.sparkSize.min + Math.random() * (preset.sparkSize.max - preset.sparkSize.min);
+
+            var sprite = new PIXI.Sprite(tex);
+            sprite.anchor.set(0.5);
+            sprite.x = sx; sprite.y = sy;
+            sprite.blendMode = PIXI.BLEND_MODES.ADD;
+            app.stage.addChild(sprite);
+
+            _presetSprites.push({
+              sprite: sprite, x: sx, y: sy,
+              vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+              life: life, maxLife: life, size: size,
+              gravity: preset.sparkGravity,
+              rotation: 0, rotSpeed: 0
+            });
+          }
+        }
+
+        // 预设效果对象更新
+        function updateEffects(dt) {
+          var dtS = dt / 60;
+          for (var i = _effects.length - 1; i >= 0; i--) {
+            var e = _effects[i];
+            e.life -= dtS;
+            if (e.life <= 0) {
+              if (e.g.parent) e.g.parent.removeChild(e.g);
+              e.g.destroy();
+              _effects.splice(i, 1);
+              continue;
+            }
+            var p = 1 - e.life / e.maxLife;
+            e.g.clear();
+            if (e.type === 'ring') {
+              e.r = 3 * S + (e.maxR - 3 * S) * Math.pow(p, 0.6);
+              var alpha = Math.max(0, 1 - p * p);
+              var lw = e.lineWidth * (1 - p * 0.7);
+              e.g.lineStyle(lw * S, e.color, alpha);
+              e.g.drawCircle(e.x, e.y, e.r);
+            } else {
+              // fireball
+              var rScale = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) * 0.5;
+              e.r = 3 * S + (e.maxR - 3 * S) * rScale;
+              var alpha = p < 0.6 ? 0.8 : Math.max(0, 0.8 * (1 - (p - 0.6) / 0.4));
+              e.g.beginFill(e.color, alpha);
+              e.g.drawCircle(e.x, e.y, e.r);
+              e.g.beginFill(0xFFFFFF, alpha * 0.5 * (1 - p));
+              e.g.drawCircle(e.x, e.y, e.r * 0.4);
+              e.g.endFill();
+            }
+          }
+        }
+
+        // 预设精灵更新
+        function updatePresetSprites(dt) {
+          var dtS = dt / 60;
+          for (var i = _presetSprites.length - 1; i >= 0; i--) {
+            var p = _presetSprites[i];
+            p.vy += p.gravity * dtS;
+            p.vx *= 0.97;
+            p.x += p.vx * dtS;
+            p.y += p.vy * dtS;
+            p.life -= dtS;
+            if (p.life <= 0) {
+              if (p.sprite.parent) p.sprite.parent.removeChild(p.sprite);
+              p.sprite.destroy();
+              _presetSprites.splice(i, 1);
+              continue;
+            }
+            var progress = 1 - (p.life / p.maxLife);
+            var alpha = Math.max(0, p.life / p.maxLife);
+            var scaleBurst = progress < 0.15 ? progress / 0.15 : Math.max(0, 1 - (progress - 0.15) / 0.85);
+            p.sprite.x = p.x; p.sprite.y = p.y;
+            p.sprite.alpha = alpha * 0.9;
+            p.sprite.rotation += p.rotSpeed * dtS;
+            p.sprite.scale.set(p.size * S * scaleBurst);
+          }
+        }
       } catch (e) { setVersion('Pixi Error'); }
     } else { setVersion('PixiJS CDN Failed'); }
 
@@ -398,7 +616,7 @@
           var cm = 1 + Math.min(combo * CONFIG.comboMultiplier, CONFIG.maxCombo - 1);
           score += Math.round(CONFIG.tapScore * cm);
           var pos = t.position();
-          emitExplosion(pos.x, pos.y, t.color);
+          emitPreset(pos.x, pos.y);
           comboEl.textContent = combo >= 2 ? '🔥 ' + combo + '连击' : '';
           scoreEl.textContent = score;
           return;
@@ -432,6 +650,17 @@
         while(explosions.length) {
           var e = explosions.pop();
           if (e.g) { if(e.g.parent) e.g.parent.removeChild(e.g); e.g.destroy(); }
+        }
+        // 清理预设系统效果
+        while(_effects.length) {
+          var e = _effects.pop();
+          if (e.g && e.g.parent) e.g.parent.removeChild(e.g);
+          if (e.g) e.g.destroy();
+        }
+        while(_presetSprites.length) {
+          var s = _presetSprites.pop();
+          if (s.sprite && s.sprite.parent) s.sprite.parent.removeChild(s.sprite);
+          if (s.sprite) s.sprite.destroy();
         }
       }
       threatId = 0; spawnTimer = 0;
@@ -490,10 +719,13 @@
         for (var i = particles.length - 1; i >= 0; i--) {
           if (!particles[i].update(dt)) particles.splice(i, 1);
         }
-        // 更新爆炸特效对象
+        // 更新爆炸特效对象（旧版兼容 + 预设系统）
         for (var i = explosions.length - 1; i >= 0; i--) {
           if (!explosions[i].update(dt)) explosions.splice(i, 1);
         }
+        // 更新预设爆炸效果
+        updateEffects(dt);
+        updatePresetSprites(dt);
       }
 
       ctx.save();
@@ -509,7 +741,7 @@
       requestAnimationFrame(loop);
     }
 
-    setVersion('多阶段爆炸 v5.0.4');
+    setVersion('冲击波爆炸 v5.1.0');
     requestAnimationFrame(loop);
   })();
   </script>
