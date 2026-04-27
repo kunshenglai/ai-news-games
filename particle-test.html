@@ -238,7 +238,8 @@
       this.life -= dtS;
       var progress = 1 - (this.life / this.maxLife);
       var alpha = Math.max(0, this.life / this.maxLife);
-      var scaleBurst = progress < 0.08 ? progress / 0.08 : Math.max(0, 1 - (progress - 0.08) / 0.92);
+      // 更平缓的膨胀曲线：20% 时达最大，之后逐渐收缩
+      var scaleBurst = progress < 0.2 ? progress / 0.2 : Math.max(0, 1 - (progress - 0.2) / 0.8);
       this.sprite.x = this.x; this.sprite.y = this.y;
       this.sprite.alpha = alpha * 0.9;
       this.sprite.rotation += this.rotSpeed * dtS;
@@ -325,18 +326,18 @@
       var colors = [0xFF2244, 0xFF6600, 0xFFAA00, 0xFFDD00, 0xFFFF44, 0x44FF44, 0x4488FF, 0xFF44AA];
       for (var i = 0; i < 60; i++) {
         var a = Math.random() * Math.PI * 2;
-        var sp = (3 + Math.random() * 8) * SCALE;
+        var sp = (5 + Math.random() * 12) * SCALE;
         var col = colors[Math.floor(Math.random() * colors.length)];
         var c = hexRgb(col);
         var tex = getTex(c.r, c.g, c.b, 0.15);
-        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 2, 0.5 + Math.random() * 0.4, tex, 2 + Math.random() * 3);
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 2, 0.6 + Math.random() * 0.5, tex, 2 + Math.random() * 4);
       }
 
       // 金色尾迹
       for (var i = 0; i < 25; i++) {
         var a = Math.random() * Math.PI * 2;
-        var sp = (2 + Math.random() * 4) * SCALE;
-        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.7 + Math.random() * 0.3, texGold, 1.5 + Math.random() * 2, 0.1);
+        var sp = (3 + Math.random() * 6) * SCALE;
+        emitP(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.8 + Math.random() * 0.4, texGold, 1.5 + Math.random() * 2.5, 0.1);
       }
     }
 
