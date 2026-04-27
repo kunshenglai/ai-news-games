@@ -127,7 +127,8 @@
           var x = c.getContext('2d');
           var grad = x.createRadialGradient(32, 32, 0, 32, 32, 32);
           grad.addColorStop(0, 'rgba(255,255,255,1)');
-          grad.addColorStop(0.3, 'rgba(' + r + ',' + g + ',' + b + ',0.9)');
+          grad.addColorStop(0.2, 'rgba(' + r + ',' + g + ',' + b + ',0.95)');
+          grad.addColorStop(0.6, 'rgba(' + r + ',' + g + ',' + b + ',0.5)');
           grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
           x.fillStyle = grad; x.fillRect(0, 0, 64, 64);
           return PIXI.Texture.from(c);
@@ -175,10 +176,10 @@
 
     function emitExplosion(x, y, color) {
       if (!app) return;
-      emitParticle(x, y, 0, 0, 0.1, 'spark', 25);
+      emitParticle(x, y, 0, 0, 0.1, 'spark', 12);
       for (var i = 0; i < 40; i++) {
         var a = Math.random() * Math.PI * 2; var sp = (2 + Math.random() * 6) * SCALE;
-        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.5 + Math.random()*0.4, 'fire', 6 + Math.random()*10);
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.5 + Math.random()*0.4, 'fire', 3 + Math.random()*6);
       }
       var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
       flash.drawRect(0, 0, W, H); flash.alpha = 0.3;
@@ -194,19 +195,19 @@
       for (var i = 0; i < 50; i++) {
         var a = Math.random() * Math.PI * 2; 
         var sp = (5 + Math.random() * 10) * SCALE; 
-        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 3, 0.8 + Math.random()*0.4, 'spark', 4 + Math.random()*4);
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 3, 0.8 + Math.random()*0.4, 'spark', 2 + Math.random()*3);
       }
       // 2. 碎片 (中等速度)
       for (var i = 0; i < 30; i++) {
         var a = Math.random() * Math.PI * 2; 
         var sp = (2 + Math.random() * 5) * SCALE; 
-        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 1.0, 'debris', 8 + Math.random()*8);
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 1.0, 'debris', 4 + Math.random()*5);
       }
       // 3. 烟雾 (慢速上升)
       for (var i = 0; i < 15; i++) {
         var a = Math.random() * Math.PI * 2; 
         var sp = (1 + Math.random() * 2) * SCALE; 
-        emitParticle(x, y, Math.cos(a)*sp, -1 - Math.random()*2, 1.5, 'smoke', 10 + Math.random()*10);
+        emitParticle(x, y, Math.cos(a)*sp, -1 - Math.random()*2, 1.5, 'smoke', 5 + Math.random()*6);
       }
       // 4. 红色闪光
       var flash = new PIXI.Graphics(); flash.beginFill(0xFF0000);
@@ -402,7 +403,7 @@
       requestAnimationFrame(loop);
     }
 
-    setVersion('爆炸修正 v5.0.2');
+    setVersion('光圈缩小 v5.0.3');
     requestAnimationFrame(loop);
   })();
   </script>
