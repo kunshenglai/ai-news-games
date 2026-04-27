@@ -51,7 +51,7 @@
     <div class="news">📰 突发: 特朗普在白宫晚宴遭枪击</div>
     <div class="start-btn" id="start-btn">立即行动</div>
   </div>
-  <div id="version">v5.4.1 - Shockwave</div>
+  <div id="version">v5.4.2 - Shockwave</div>
 
   <script>
   (function() {
@@ -99,7 +99,7 @@
     var versionEl = document.getElementById('version');
 
     function setVersion(msg) {
-      if (versionEl) versionEl.textContent = 'v5.0.1 - ' + msg;
+      if (versionEl) versionEl.textContent = msg;
     }
 
     function resize() {
@@ -350,7 +350,7 @@
           }
         }
 
-        // updateEffects and updatePresetSprites moved below try block      } catch (e) { setVersion('Pixi Error'); }
+        } catch (e) { setVersion('Pixi Error'); }
     } else { setVersion('PixiJS CDN Failed'); }
 
         // 预设效果对象更新
@@ -830,7 +830,7 @@
       requestAnimationFrame(loop);
     }
 
-    setVersion('冲击波爆炸 v5.4.1');
+    setVersion('v5.4.2 - Shockwave');
     requestAnimationFrame(loop);
   })();
   </script>
