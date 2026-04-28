@@ -17,9 +17,12 @@
     #title { color: #FFD700; font-size: 18px; font-weight: 900; text-shadow: 0 0 15px #FF4400, 2px 2px 4px #000; }
     #subtitle { color: #FF8800; font-size: 12px; margin-top: 4px; }
     #score-panel { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-    #score { font-size: 30px; font-weight: 900; text-shadow: 0 0 20px #FF4400; background: rgba(0,0,0,0.4); padding: 2px 10px; border-radius: 6px; border: 1px solid #FF440066; }
+    #score { font-size: 30px; font-weight: 900; text-shadow: 0 0 20px #FF4400; background: rgba(0,0,0,0.4); padding: 2px 10px; border-radius: 6px; border: 1px solid #FF440066; display: inline-block; }
+    #score.bump { animation: scoreBump 0.2s ease-out; }
+    @keyframes scoreBump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
     #combo { font-size: 15px; color: #FFD700; min-height: 20px; font-weight: bold; }
     #timer { font-size: 14px; color: #fff; margin-top: 6px; font-weight: bold; background: #FF4400; padding: 3px 8px; border-radius: 6px; }
+    #phase { font-size: 12px; color: #00FF88; margin-top: 4px; font-weight: bold; }
     #news-bar { position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 16px max(20px, env(safe-area-inset-bottom)) 16px; background: linear-gradient(transparent, rgba(0,0,0,0.95)); color: #aaa; font-size: 11px; pointer-events: none; text-align: center; }
     #game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #fff; display: none; z-index: 20; background: rgba(0,0,0,0.9); width: 80%; max-width: 320px; padding: 24px; border-radius: 16px; border: 2px solid #FF4400; }
     #game-over h2 { color: #FF4400; font-size: 24px; margin-bottom: 16px; }
@@ -30,6 +33,10 @@
     #start-screen .news { color: #FF8800; font-size: 14px; text-align: center; margin-bottom: 32px; }
     #start-screen .start-btn { color: #0a0508; background: #FFD700; font-size: 20px; font-weight: bold; padding: 14px 48px; border-radius: 40px; border: none; }
     #version { position: absolute; bottom: 40px; left: 10px; color: #00FF00; font-size: 11px; z-index: 100; font-family: monospace; background: rgba(0,0,0,0.6); padding: 3px 6px; border-radius: 4px; }
+    /* 道具收集通知 */
+    #powerup-notification { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 22px; font-weight: bold; text-shadow: 0 0 20px currentColor, 0 2px 4px #000; pointer-events: none; z-index: 15; opacity: 0; transition: opacity 0.3s; text-align: center; white-space: nowrap; }
+    #powerup-notification.show { animation: notifPop 1.2s ease-out forwards; }
+    @keyframes notifPop { 0% { opacity: 0; transform: translateX(-50%) scale(0.5) translateY(20px); } 20% { opacity: 1; transform: translateX(-50%) scale(1.1) translateY(0); } 40% { transform: translateX(-50%) scale(1) translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-30px); } }
   </style>
 </head>
 <body>
@@ -37,7 +44,7 @@
   <div id="pixi-container"></div>
   <div id="ui">
     <div id="title-area"><div id="title">🏛️ 白宫保卫战</div><div id="subtitle">消除威胁，保护安全</div></div>
-    <div id="score-panel"><div id="score">0</div><div id="combo"></div><div id="timer">⏱️ 45s</div></div>
+    <div id="score-panel"><div id="score">0</div><div id="combo"></div><div id="timer">⏱️ 45s</div><div id="phase"></div></div>
   </div>
   <div id="news-bar">📰 热点: 特朗普在白宫晚宴遭枪击 | 点击消除红色威胁物</div>
   <div id="game-over">
@@ -45,13 +52,15 @@
     <p>最终得分: <span id="final-score">0</span></p>
     <p>最高连击: <span id="final-combo">0</span></p>
     <p id="go-rating"></p>
+    <p>历史最高: <span id="high-score">0</span></p>
   </div>
   <div id="start-screen">
     <h1>🏛️ 白宫保卫战</h1>
     <div class="news">📰 突发: 特朗普在白宫晚宴遭枪击</div>
     <div class="start-btn" id="start-btn">立即行动</div>
   </div>
-  <div id="version">v5.4.2 - Shockwave</div>
+  <div id="powerup-notification"></div>
+  <div id="version">v5.6.0 - Visual Overhaul</div>
 
   <script>
   (function() {
@@ -70,6 +79,31 @@
     var gameTime = 0, threatId = 0, spawnTimer = 0;
     var threats = [];
     var screenShake = { intensity: 0, timer: 0, offsetX: 0, offsetY: 0 };
+    var powerUps = [];
+    var powerUpSpawnTimer = 0;
+    var shieldActive = false;
+    var freezeActive = false;
+    var freezeTimer = 0;
+    var bossSpawned = false;
+    var bossDefeated = false;
+    var highScore = 0;
+
+    // === 新增: 星空系统 ===
+    var stars = [];
+    var STAR_COUNT = 80;
+
+    // === 新增: 拖尾粒子系统 ===
+    var trailParticles = [];
+
+    // === 新增: 浮动文字系统 ===
+    var floatingTexts = [];
+
+    // === 新增: Boss烟雾发射计时 ===
+    var bossSmokeTimer = 0;
+
+    // === 新增: 屏幕白闪 ===
+    var screenFlashAlpha = 0;
+    var screenFlashColor = '#FFFFFF';
 
     function triggerShake(intensity) {
       screenShake.intensity = intensity;
@@ -96,10 +130,46 @@
     var scoreEl = document.getElementById('score');
     var comboEl = document.getElementById('combo');
     var timerEl = document.getElementById('timer');
+    var phaseEl = document.getElementById('phase');
     var versionEl = document.getElementById('version');
+    var notifEl = document.getElementById('powerup-notification');
 
     function setVersion(msg) {
       if (versionEl) versionEl.textContent = msg;
+    }
+
+    // === 新增: 分数弹跳 ===
+    function bumpScore() {
+      if (!scoreEl) return;
+      scoreEl.classList.remove('bump');
+      void scoreEl.offsetWidth; // 强制回流
+      scoreEl.classList.add('bump');
+      setTimeout(function() { scoreEl.classList.remove('bump'); }, 250);
+    }
+
+    // === 新增: 浮动文字 ===
+    function addFloatingText(x, y, text, color, fontSize) {
+      floatingTexts.push({
+        x: x, y: y, text: text, color: color || '#FFD700',
+        fontSize: fontSize || 24, life: 1.0, maxLife: 1.0
+      });
+    }
+
+    // === 新增: 道具收集通知 ===
+    function showPowerUpNotification(emoji, name) {
+      if (!notifEl) return;
+      notifEl.textContent = emoji + ' ' + name + ' 激活!';
+      notifEl.style.color = '#FFD700';
+      notifEl.classList.remove('show');
+      void notifEl.offsetWidth;
+      notifEl.classList.add('show');
+      setTimeout(function() { notifEl.classList.remove('show'); }, 1300);
+    }
+
+    // === 新增: 屏幕闪光 ===
+    function triggerScreenFlash(alpha, color) {
+      screenFlashAlpha = alpha;
+      screenFlashColor = color || '#FFFFFF';
     }
 
     function resize() {
@@ -111,6 +181,7 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       SCALE = Math.min(W / 375, 1.1);
       if (app) app.renderer.resize(W, H);
+      initStars(); // 重新生成星星
     }
     window.addEventListener('resize', resize);
     resize();
@@ -124,7 +195,11 @@
       comboMultiplier: 0.3,
       maxCombo: 10,
       missLimit: 8,
-      threatSpeed: { base: 0.010, variance: 0.004 }
+      threatSpeed: { base: 0.010, variance: 0.004 },
+      powerUpSpawnRate: 12,
+      powerUpDuration: 10,
+      bossSpawnTime: 30,
+      phaseDuration: 15
     };
     var THREAT_TYPES = [
       { emoji: '🚀', color: '#FF2200', name: '火箭' },
@@ -134,7 +209,120 @@
       { emoji: '👾', color: '#AA44FF', name: '外星人' },
       { emoji: '🌑', color: '#888888', name: '暗黑' }
     ];
+    var POWER_UP_TYPES = [
+      { emoji: '🛡️', name: '护盾', color: '#00AAFF', effect: 'shield' },
+      { emoji: '⏱️', name: '时间冻结', color: '#00FFCC', effect: 'freeze' },
+      { emoji: '💥', name: '全屏清除', color: '#FFD700', effect: 'clear' }
+    ];
     var PALETTE = { building: '#1a1218', buildingLight: '#2a2028' };
+
+    // === 星空系统 ===
+    function initStars() {
+      stars = [];
+      for (var i = 0; i < STAR_COUNT; i++) {
+        stars.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          size: 0.5 + Math.random() * 2.0,
+          speed: 0.15 + Math.random() * 0.35,
+          twinkleSpeed: 0.5 + Math.random() * 3.0,
+          twinkleOffset: Math.random() * Math.PI * 2,
+          baseAlpha: 0.3 + Math.random() * 0.7
+        });
+      }
+    }
+
+    function updateStars(dt) {
+      var dtS = dt / 60;
+      for (var i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        s.y += s.speed * dtS * 30;
+        if (s.y > H + 5) { s.y = -5; s.x = Math.random() * W; }
+      }
+    }
+
+    function drawStars(c) {
+      var t = gameTime || 0;
+      for (var i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        var twinkle = 0.5 + 0.5 * Math.sin(t * s.twinkleSpeed + s.twinkleOffset);
+        var alpha = s.baseAlpha * twinkle;
+        c.fillStyle = 'rgba(255, 255, 255, ' + alpha + ')';
+        c.beginPath();
+        c.arc(s.x, s.y, s.size * SCALE, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+
+    // === 拖尾粒子系统 ===
+    function addTrailParticle(x, y, color) {
+      if (trailParticles.length > 300) return; // 限制总数
+      trailParticles.push({
+        x: x + (Math.random() - 0.5) * 6,
+        y: y + (Math.random() - 0.5) * 6,
+        size: 1.5 + Math.random() * 3,
+        life: 0.3 + Math.random() * 0.2,
+        maxLife: 0.3 + Math.random() * 0.2,
+        color: color,
+        vy: 0.5 + Math.random() * 1.0
+      });
+    }
+
+    function updateTrailParticles(dt) {
+      var dtS = dt / 60;
+      for (var i = trailParticles.length - 1; i >= 0; i--) {
+        var p = trailParticles[i];
+        p.life -= dtS;
+        p.y += p.vy * dtS * 20;
+        if (p.life <= 0) {
+          trailParticles.splice(i, 1);
+        }
+      }
+    }
+
+    function drawTrailParticles(c) {
+      for (var i = 0; i < trailParticles.length; i++) {
+        var p = trailParticles[i];
+        var alpha = (p.life / p.maxLife) * 0.6;
+        var size = p.size * (p.life / p.maxLife) * SCALE;
+        var rgb = hexToRgb(p.color);
+        c.fillStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + alpha + ')';
+        c.beginPath();
+        c.arc(p.x, p.y, size, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+
+    // === 浮动文字更新和渲染 ===
+    function updateFloatingTexts(dt) {
+      var dtS = dt / 60;
+      for (var i = floatingTexts.length - 1; i >= 0; i--) {
+        var ft = floatingTexts[i];
+        ft.life -= dtS;
+        ft.y -= 1.5 * dtS * 60;
+        if (ft.life <= 0) {
+          floatingTexts.splice(i, 1);
+        }
+      }
+    }
+
+    function drawFloatingTexts(c) {
+      for (var i = 0; i < floatingTexts.length; i++) {
+        var ft = floatingTexts[i];
+        var alpha = Math.max(0, ft.life / ft.maxLife);
+        var size = ft.fontSize * SCALE * (1 + (1 - alpha) * 0.3);
+        c.save();
+        c.globalAlpha = alpha;
+        c.fillStyle = ft.color;
+        c.font = 'bold ' + size + 'px sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.shadowColor = ft.color;
+        c.shadowBlur = 10;
+        c.fillText(ft.text, ft.x, ft.y);
+        c.restore();
+      }
+    }
 
     // 预设系统变量（在 try 外部声明，确保函数可访问）
     var texCache = {};
@@ -247,7 +435,7 @@
           var preset = SHOCKWAVE_PRESET;
           var S = SCALE;
           if (!app || !app.stage) return;
-          
+
           // 动态生成色板
           var colors = generateExplosionColors(colorHex || preset.fireballs[0].color);
 
@@ -276,7 +464,7 @@
             }, fb.delay);
           });
 
-          // 冲击波环
+          // 冲击波环 (2-3层，延迟错开)
           preset.rings.forEach(function(r) {
             setTimeout(function() {
               var ringObj = {
@@ -347,6 +535,13 @@
               gravity: preset.sparkGravity,
               rotation: 0, rotSpeed: 0
             });
+          }
+
+          // 新增: 爆炸后残留的缓慢上升烟雾
+          for (var i = 0; i < 6; i++) {
+            var a = Math.random() * Math.PI * 2;
+            var sp = (0.5 + Math.random()) * S;
+            emitParticle(x + Math.cos(a) * 5, y, Math.cos(a) * sp, -1.5 - Math.random() * 1.5, 1.0 + Math.random() * 0.5, 'smoke', 3 + Math.random() * 4);
           }
         }
 
@@ -529,21 +724,26 @@
       app.stage.addChild(flash);
       setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 60);
 
-      // 阶段2: 火球（0帧出现，膨胀后碎裂）
+      // 阶段2: 火球（使用威胁颜色）
       var fbColor = rgbToHex(Math.min(255, c.r + 80), Math.min(255, c.g + 40), c.b);
       explosions.push(new Fireball(x, y, 28 * SCALE, fbColor));
 
-      // 阶段3: 冲击波环
-      explosions.push(new ShockwaveRing(x, y, 60 * SCALE, 0xFFAA44, 4));
+      // 阶段3: 冲击波环 (2-3层，使用威胁颜色)
+      var ringColor1 = rgbToHex(c.r, c.g, c.b);
+      var ringColor2 = rgbToHex(Math.max(0, c.r - 40), Math.max(0, c.g - 20), Math.max(0, c.b - 20));
+      explosions.push(new ShockwaveRing(x, y, 60 * SCALE, ringColor1, 4));
       setTimeout(function() {
-        explosions.push(new ShockwaveRing(x, y, 80 * SCALE, 0xFF6622, 2.5));
+        explosions.push(new ShockwaveRing(x, y, 80 * SCALE, ringColor2, 2.5));
       }, 50);
+      setTimeout(function() {
+        explosions.push(new ShockwaveRing(x, y, 100 * SCALE, 0xFF4400, 1.5));
+      }, 100);
 
       // 阶段4: 碎片飞散（带旋转）
       for (var i = 0; i < 25; i++) {
         var a = Math.random() * Math.PI * 2;
         var sp = (3 + Math.random() * 7) * SCALE;
-        var p = emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 2, 0.4 + Math.random()*0.3, 'debris', 2 + Math.random()*4);
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 2, 0.4 + Math.random()*0.3, 'debris', 2 + Math.random()*4);
       }
 
       // 阶段5: 火花（快速）
@@ -551,6 +751,13 @@
         var a = Math.random() * Math.PI * 2;
         var sp = (4 + Math.random() * 8) * SCALE;
         emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 3, 0.3 + Math.random()*0.2, 'spark', 1.5 + Math.random()*2);
+      }
+
+      // 阶段6: 残留烟雾缓慢上升
+      for (var i = 0; i < 5; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (0.5 + Math.random()) * SCALE;
+        emitParticle(x + Math.cos(a) * 5, y, Math.cos(a) * sp, -1.5 - Math.random() * 1.5, 1.0 + Math.random() * 0.5, 'smoke', 3 + Math.random() * 4);
       }
     }
 
@@ -585,6 +792,54 @@
       }
     }
 
+    // Boss超级爆炸效果 (增强版)
+    function emitBossExplosion(x, y) {
+      if (!app) return;
+
+      // 阶段1: 屏幕全白闪200ms
+      triggerScreenFlash(0.8, '#FFFFFF');
+
+      // 阶段2: 大规模局部闪光
+      var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
+      flash.drawRect(0, 0, W, H); flash.alpha = 0.5;
+      app.stage.addChild(flash);
+      setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 200);
+
+      // 阶段3: 多层冲击波 (延迟错开)
+      explosions.push(new ShockwaveRing(x, y, 120 * SCALE, 0xFFFF00, 8));
+      setTimeout(function() { explosions.push(new ShockwaveRing(x, y, 180 * SCALE, 0xFF8800, 6)); }, 80);
+      setTimeout(function() { explosions.push(new ShockwaveRing(x, y, 250 * SCALE, 0xFF4400, 4)); }, 160);
+      setTimeout(function() { explosions.push(new ShockwaveRing(x, y, 320 * SCALE, 0xFF0000, 2)); }, 240);
+
+      // 阶段4: 大火球多层
+      explosions.push(new Fireball(x, y, 50 * SCALE, 0xFFFF44));
+      setTimeout(function() { explosions.push(new Fireball(x, y, 40 * SCALE, 0xFF8800)); }, 80);
+      setTimeout(function() { explosions.push(new Fireball(x, y, 30 * SCALE, 0xFF4400)); }, 160);
+
+      // 阶段5: 大量碎片
+      for (var i = 0; i < 60; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (4 + Math.random() * 12) * SCALE;
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp, 0.6 + Math.random()*0.6, 'debris', 3 + Math.random()*7);
+      }
+
+      // 阶段6: 大量火花
+      for (var i = 0; i < 50; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (5 + Math.random() * 14) * SCALE;
+        emitParticle(x, y, Math.cos(a)*sp, Math.sin(a)*sp - 4, 0.4 + Math.random()*0.4, 'spark', 2 + Math.random()*4);
+      }
+
+      // 阶段7: 浓烟
+      for (var i = 0; i < 20; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = (1 + Math.random() * 2) * SCALE;
+        emitParticle(x + Math.cos(a) * 10, y + Math.sin(a) * 10, Math.cos(a) * sp, -2 - Math.random() * 3, 1.5 + Math.random() * 1.0, 'smoke', 5 + Math.random() * 8);
+      }
+
+      triggerShake(25);
+    }
+
     function hexToRgb(hex) {
       var r = parseInt(hex.slice(1,3), 16) || 200;
       var g = parseInt(hex.slice(3,5), 16) || 100;
@@ -595,8 +850,29 @@
       return (r << 16) | (g << 8) | b;
     }
 
+    // === Boss血条渐变色 ===
+    function getBossBarColor(hpRatio) {
+      // hpRatio: 1.0 = full, 0.0 = empty
+      if (hpRatio > 0.6) {
+        // 绿色→黄色
+        var t = (hpRatio - 0.6) / 0.4;
+        var r = Math.round(255 - t * 55);
+        var g = Math.round(200 + t * 55);
+        var b = 0;
+        return 'rgb(' + r + ',' + g + ',' + b + ')';
+      } else {
+        // 黄色→红色
+        var t = hpRatio / 0.6;
+        var r = 255;
+        var g = Math.round(200 * t);
+        var b = 0;
+        return 'rgb(' + r + ',' + g + ',' + b + ')';
+      }
+    }
+
     function Threat(x, y, type, id) {
       this.x = x; this.y = y; this.type = type % 6; this.id = id;
+      this.isBoss = false; this.hp = 1; this.maxHp = 1;
       this.radius = (18 + Math.random() * 8) * SCALE;
       this.targetX = x; this.targetY = H * 0.75 + Math.random() * (H * 0.15);
       this.progress = 0;
@@ -606,10 +882,41 @@
       this.alive = true; this.time = Math.random() * 100;
       this.color = THREAT_TYPES[this.type % THREAT_TYPES.length].color;
       this.emoji = THREAT_TYPES[this.type % THREAT_TYPES.length].emoji;
+      // 新增: 受击闪烁
+      this.flashTimer = 0;
+      this.flashColor = '#FFFFFF';
+      // 新增: Boss抖动
+      this.bossShakeX = 0; this.bossShakeY = 0;
+      this.bossShakeTimer = 0;
+      // 新增: 拖尾计时
+      this.trailTimer = 0;
+      // 新增: 前一个位置（用于拖尾方向）
+      this.prevPos = null;
     }
     Threat.prototype.update = function(dt) {
+      // 时间冻结时不更新进度
+      if (freezeActive) return false;
+      // 更新闪烁计时
+      if (this.flashTimer > 0) this.flashTimer -= dt / 60;
+      // 更新Boss抖动
+      if (this.bossShakeTimer > 0) {
+        this.bossShakeTimer -= dt / 60;
+        this.bossShakeX = (Math.random() - 0.5) * 8 * SCALE * (this.bossShakeTimer / 0.2);
+        this.bossShakeY = (Math.random() - 0.5) * 8 * SCALE * (this.bossShakeTimer / 0.2);
+      } else {
+        this.bossShakeX = 0; this.bossShakeY = 0;
+      }
       this.progress += this.speed * dt;
       this.time += 0.08 * dt; this.wobble += 0.06 * dt;
+      // 拖尾发射
+      this.trailTimer += dt;
+      if (this.trailTimer >= 2) { // 每2帧发射一次
+        this.trailTimer = 0;
+        var pos = this.position();
+        addTrailParticle(pos.x, pos.y, this.color);
+      }
+      // 记录前一个位置
+      this.prevPos = this.position();
       if (this.progress >= 1) { this.progress = 1; return true; }
       return false;
     };
@@ -622,15 +929,52 @@
       };
     };
     Threat.prototype.render = function(c) {
-      var p = this.position(); var r = this.radius;
-      c.save(); c.translate(p.x, p.y);
-      c.fillStyle = this.color;
+      var p = this.position();
+      var r = this.radius;
+      // 新增: Boss抖动偏移
+      var ox = this.bossShakeX;
+      var oy = this.bossShakeY;
+      c.save(); c.translate(p.x + ox, p.y + oy);
+      // 受击闪烁
+      var isFlashing = this.flashTimer > 0;
+      if (isFlashing) {
+        // 闪烁期间交替白色和原色
+        var flashAlpha = this.flashTimer / 0.15; // 150ms闪
+        if (Math.sin(this.flashTimer * 40) > 0) {
+          c.fillStyle = this.flashColor;
+        } else {
+          c.fillStyle = this.color;
+        }
+      } else {
+        c.fillStyle = this.color;
+      }
+      // Boss缩放效果（受击时缩小）
+      if (this.isBoss && this.flashTimer > 0) {
+        var shrink = 0.9 + 0.1 * (this.flashTimer / 0.15);
+        c.scale(shrink, shrink);
+      }
       c.beginPath(); c.arc(0, 0, r, 0, Math.PI*2); c.fill();
       c.fillStyle = 'rgba(255,255,255,0.3)';
       c.beginPath(); c.arc(-r*0.3, -r*0.3, r*0.2, 0, Math.PI*2); c.fill();
       c.fillStyle = '#000'; c.font = 'bold ' + (r * 1.1) + 'px sans-serif';
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText(this.emoji, 0, r*0.05);
+      // Boss血量条（渐变增强）
+      if (this.isBoss && this.maxHp > 1) {
+        var barW = r * 2, barH = 8 * SCALE;
+        var barY = -r - 12 * SCALE;
+        c.fillStyle = 'rgba(0,0,0,0.7)';
+        c.fillRect(-barW/2, barY, barW, barH);
+        // 渐变色血条
+        var hpRatio = this.hp / this.maxHp;
+        c.fillStyle = getBossBarColor(hpRatio);
+        c.fillRect(-barW/2, barY, barW * hpRatio, barH);
+        c.strokeStyle = '#FFD700'; c.lineWidth = 1;
+        c.strokeRect(-barW/2, barY, barW, barH);
+        // Boss标签
+        c.fillStyle = '#FFD700'; c.font = 'bold ' + (10 * SCALE) + 'px sans-serif';
+        c.fillText('BOSS', 0, barY - 8 * SCALE);
+      }
       c.restore();
     };
     Threat.prototype.hitTest = function(x, y) {
@@ -638,9 +982,87 @@
       var dx = x - p.x, dy = y - p.y;
       return dx*dx + dy*dy < (this.radius + 14*SCALE)*(this.radius + 14*SCALE);
     };
+    // 新增: 受击闪烁方法
+    Threat.prototype.flash = function(color) {
+      this.flashTimer = 0.15; // 150ms
+      this.flashColor = color || '#FFFFFF';
+      if (this.isBoss) {
+        this.bossShakeTimer = 0.2; // Boss额外抖动200ms
+      }
+    };
+
+    function PowerUp(x, y, typeIdx) {
+      this.x = x; this.y = y; this.typeIdx = typeIdx % 3;
+      this.radius = 22 * SCALE;
+      this.emoji = POWER_UP_TYPES[this.typeIdx].emoji;
+      this.color = POWER_UP_TYPES[this.typeIdx].color;
+      this.effect = POWER_UP_TYPES[this.typeIdx].effect;
+      this.alive = true; this.time = 0;
+      this.life = CONFIG.powerUpDuration; // 道具存活时间(秒)
+      this.wobble = Math.random() * Math.PI * 2;
+    }
+    PowerUp.prototype.update = function(dt) {
+      this.time += dt / 60;
+      this.wobble += 0.05 * dt;
+      this.y += 0.3 * SCALE * dt; // 缓慢下落
+      if (this.time >= this.life) { this.alive = false; }
+      return this.alive;
+    };
+    PowerUp.prototype.render = function(c) {
+      var r = this.radius;
+      // 呼吸闪烁 alpha在0.6-1.0之间
+      var breathe = 0.6 + 0.4 * Math.sin(this.time * 3);
+      var alpha = this.time > this.life - 2 ? Math.max(0, (this.life - this.time) / 2) * breathe : breathe;
+      c.save(); c.globalAlpha = alpha;
+      c.translate(this.x, this.y);
+      // 旋转光环 (2-3层不同半径)
+      var ringColors = [];
+      if (this.effect === 'shield') {
+        ringColors = ['#00AAFF', '#0088DD', '#0066BB'];
+      } else if (this.effect === 'freeze') {
+        ringColors = ['#00FFCC', '#00DDAA', '#00BB88'];
+      } else {
+        ringColors = ['#FFD700', '#FFAA00', '#FF8800'];
+      }
+      for (var ri = 0; ri < 3; ri++) {
+        var ringR = r * (1.3 + ri * 0.35);
+        var ringAlpha = (0.25 - ri * 0.07) * alpha;
+        var rotAngle = this.time * (1.5 + ri * 0.8) + ri * 1.2;
+        c.strokeStyle = ringColors[ri];
+        c.lineWidth = (2 - ri * 0.4) * SCALE;
+        c.globalAlpha = ringAlpha;
+        c.beginPath();
+        c.arc(0, 0, ringR * SCALE, rotAngle, rotAngle + Math.PI * 1.2);
+        c.stroke();
+        // 对面也画一段
+        c.beginPath();
+        c.arc(0, 0, ringR * SCALE, rotAngle + Math.PI, rotAngle + Math.PI * 1.5);
+        c.stroke();
+      }
+      c.globalAlpha = alpha;
+      // 发光背景
+      c.fillStyle = this.color;
+      c.globalAlpha = alpha * 0.3;
+      c.beginPath(); c.arc(0, 0, r * 1.3, 0, Math.PI * 2); c.fill();
+      c.globalAlpha = alpha * 0.6;
+      c.beginPath(); c.arc(0, 0, r * 1.1, 0, Math.PI * 2); c.fill();
+      c.globalAlpha = alpha;
+      c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill();
+      // Emoji
+      c.fillStyle = '#fff'; c.font = 'bold ' + (r * 1.2) + 'px sans-serif';
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(this.emoji, 0, r * 0.05);
+      c.restore();
+    };
+    PowerUp.prototype.hitTest = function(x, y) {
+      var dx = x - this.x, dy = y - this.y;
+      return dx*dx + dy*dy < (this.radius + 10*SCALE)*(this.radius + 10*SCALE);
+    };
 
     function drawBackground(c) {
       c.fillStyle = '#0a0510'; c.fillRect(0, 0, W, H);
+      // 绘制星空
+      drawStars(c);
       var bw = W * 0.75, bh = H * 0.14;
       var bx = (W - bw) / 2, by = H * 0.82;
       c.fillStyle = PALETTE.building; c.fillRect(bx, by, bw, bh);
@@ -670,20 +1092,131 @@
       threats.push(new Threat(m + Math.random()*(W - 2*m), -50, type, threatId++));
     }
 
+    function spawnPowerUp() {
+      var typeIdx = Math.floor(Math.random() * 3);
+      var m = 60 * SCALE;
+      var x = m + Math.random() * (W - 2 * m);
+      var y = 40 * SCALE + Math.random() * (H * 0.3);
+      powerUps.push(new PowerUp(x, y, typeIdx));
+    }
+
+    function spawnBoss() {
+      if (bossSpawned) return;
+      bossSpawned = true;
+      var m = 40 * SCALE;
+      var boss = new Threat(W / 2, -80, 0, threatId++);
+      boss.isBoss = true;
+      boss.hp = 3; boss.maxHp = 3;
+      boss.radius = 35 * SCALE;
+      boss.speed = CONFIG.threatSpeed.base * 0.4 * SCALE; // 更慢
+      boss.targetY = H * 0.35;
+      boss.color = '#FF0044';
+      boss.emoji = '👹';
+      threats.push(boss);
+    }
+
+    function collectPowerUp(pu) {
+      var type = pu.effect;
+      var puInfo = POWER_UP_TYPES[pu.typeIdx];
+      if (type === 'shield') {
+        shieldActive = true;
+        score += 5;
+        scoreEl.textContent = score;
+        bumpScore();
+        showPowerUpNotification('🛡️', '护盾');
+        addFloatingText(pu.x, pu.y - 30, '+5 🛡️', '#00AAFF', 20);
+      } else if (type === 'freeze') {
+        freezeActive = true;
+        freezeTimer = 5; // 5秒冻结
+        score += 10;
+        scoreEl.textContent = score;
+        bumpScore();
+        showPowerUpNotification('❄️', '时间冻结');
+        addFloatingText(pu.x, pu.y - 30, '+10 ❄️', '#00FFCC', 20);
+      } else if (type === 'clear') {
+        // 消灭所有当前存活的非Boss威胁
+        for (var i = 0; i < threats.length; i++) {
+          var t = threats[i];
+          if (t.alive && !t.isBoss) {
+            t.alive = false;
+            combo++; if (combo > maxCombo) maxCombo = combo;
+            var cm = 1 + Math.min(combo * CONFIG.comboMultiplier, CONFIG.maxCombo - 1);
+            score += Math.round(CONFIG.tapScore * cm * 0.5);
+            var pos = t.position();
+            try { emitPreset(pos.x, pos.y, t.color); } catch(e) {}
+          }
+        }
+        score += 50;
+        scoreEl.textContent = score;
+        bumpScore();
+        try { showPowerUpNotification('💥', '全屏清除'); } catch(e) {}
+        try { addFloatingText(W / 2, H / 2 - 50, '💥 CLEAR!', '#FFD700', 32); } catch(e) {}
+        // 全屏闪光
+        if (app) {
+          var flash = new PIXI.Graphics(); flash.beginFill(0xFFFFFF);
+          flash.drawRect(0, 0, W, H); flash.alpha = 0.6;
+          app.stage.addChild(flash);
+          setTimeout(function() { if(flash.parent) flash.parent.removeChild(flash); flash.destroy(); }, 100);
+        }
+        try { triggerShake(10); } catch(e) {}
+      }
+      scoreEl.textContent = score;
+    }
+
     function handleTap(x, y) {
       if (!gameActive) return;
+      // 先检查是否点击道具
+      for (var i = powerUps.length - 1; i >= 0; i--) {
+        var pu = powerUps[i]; if (!pu.alive) continue;
+        if (pu.hitTest(x, y)) {
+          pu.alive = false;
+          collectPowerUp(pu);
+          return;
+        }
+      }
+      // 检查是否点击威胁
       for (var i = threats.length - 1; i >= 0; i--) {
         var t = threats[i]; if (!t.alive) continue;
         if (t.hitTest(x, y)) {
+          if (t.isBoss && t.hp > 1) {
+            // Boss需要多次点击
+            t.hp--;
+            var pos = t.position();
+            // 受击闪烁：Boss红色闪烁
+            t.flash('#FF0044');
+            try { emitPreset(pos.x, pos.y, t.color); } catch(e) {}
+            try { triggerShake(8); } catch(e) {}
+            if (t.hp <= 0) {
+              t.alive = false;
+              bossDefeated = true;
+              combo += 3; if (combo > maxCombo) maxCombo = combo;
+              var cm = 1 + Math.min(combo * CONFIG.comboMultiplier, CONFIG.maxCombo - 1);
+              score += Math.round(CONFIG.tapScore * cm * 5); // Boss奖励5倍
+              scoreEl.textContent = score;
+              comboEl.textContent = combo >= 2 ? '🔥 ' + combo + '连击' : '';
+              bumpScore();
+              try { emitBossExplosion(pos.x, pos.y); } catch(e) {}
+              try { addFloatingText(pos.x, pos.y - 40, '👹 BOSS ELIMINATED!', '#FF0044', 28); } catch(e) {}
+            }
+            return;
+          }
+          // 普通威胁受击闪烁白色
+          t.flash('#FFFFFF');
           t.alive = false;
           combo++; if (combo > maxCombo) maxCombo = combo;
           var cm = 1 + Math.min(combo * CONFIG.comboMultiplier, CONFIG.maxCombo - 1);
           score += Math.round(CONFIG.tapScore * cm);
-          var pos = t.position();
-          emitPreset(pos.x, pos.y, t.color);
-          triggerShake(6 + Math.min(combo, 10)); // 连击越多震动越强
-          comboEl.textContent = combo >= 2 ? '🔥 ' + combo + '连击' : '';
+          // 先更新UI，再执行特效（防止特效报错阻断分数显示）
           scoreEl.textContent = score;
+          comboEl.textContent = combo >= 2 ? '🔥 ' + combo + '连击' : '';
+          bumpScore();
+          var pos = t.position();
+          try { emitPreset(pos.x, pos.y, t.color); } catch(e) {}
+          try { triggerShake(6 + Math.min(combo, 10)); } catch(e) {}
+          // 连击浮动文字
+          if (combo >= 3) {
+            try { addFloatingText(pos.x, pos.y - 20, combo + ' COMBO!', '#FFD700', 22); } catch(e) {}
+          }
           return;
         }
       }
@@ -705,11 +1238,23 @@
 
     function gameOver() {
       gameActive = false;
+      // 保存最高分到 localStorage
+      try {
+        var saved = localStorage.getItem('whitehouse_defense_highscore');
+        var prevHigh = saved ? parseInt(saved, 10) : 0;
+        if (score > prevHigh) {
+          highScore = score;
+          localStorage.setItem('whitehouse_defense_highscore', score.toString());
+        } else {
+          highScore = prevHigh;
+        }
+      } catch(e) {}
       var r = score > 2000 ? '⭐ 优秀' : score > 1000 ? '👍 合格' : '💪 加油';
       document.getElementById('final-score').textContent = score;
       document.getElementById('final-combo').textContent = maxCombo;
       document.getElementById('go-rating').textContent = r;
       document.getElementById('go-title').textContent = score > 1000 ? '🛡️ 完成!' : '⚠️ 失败!';
+      document.getElementById('high-score').textContent = highScore;
       gameOverScreen.style.display = 'block';
     }
 
@@ -719,6 +1264,14 @@
       gameOverScreen.style.display = 'none';
       score = 0; combo = 0; maxCombo = 0; missed = 0;
       gameTime = 0; threats = [];
+      powerUps = []; powerUpSpawnTimer = 0;
+      shieldActive = false; freezeActive = false; freezeTimer = 0;
+      bossSpawned = false; bossDefeated = false;
+      // 加载最高分
+      try {
+        var saved = localStorage.getItem('whitehouse_defense_highscore');
+        highScore = saved ? parseInt(saved, 10) : 0;
+      } catch(e) { highScore = 0; }
       if (app && particles) {
         while(particles.length) {
           var p = particles.pop();
@@ -741,6 +1294,11 @@
           if (s.sprite) s.sprite.destroy();
         }
       }
+      // 清理新增系统
+      trailParticles = [];
+      floatingTexts = [];
+      bossSmokeTimer = 0;
+      screenFlashAlpha = 0;
       threatId = 0; spawnTimer = 0;
       scoreEl.textContent = '0'; comboEl.textContent = '';
     }
@@ -779,21 +1337,73 @@
         if (spawnTimer >= 1 / getDifficulty() && gameTime > 0.5) {
           spawnThreat(); spawnTimer = 0;
         }
+        // 道具生成
+        powerUpSpawnTimer += dt / 60;
+        if (powerUpSpawnTimer >= CONFIG.powerUpSpawnRate && powerUps.filter(function(p) { return p.alive; }).length < 2) {
+          spawnPowerUp(); powerUpSpawnTimer = 0;
+        }
+        // Boss生成
+        if (gameTime >= CONFIG.bossSpawnTime && !bossSpawned) {
+          spawnBoss();
+        }
+        // 冻结倒计时
+        if (freezeActive) {
+          freezeTimer -= dt / 60;
+          if (freezeTimer <= 0) { freezeActive = false; freezeTimer = 0; }
+        }
+        // Boss烟雾发射
+        if (bossSpawned && !bossDefeated) {
+          bossSmokeTimer += dt;
+          if (bossSmokeTimer >= 3) { // 每3帧发射一次
+            bossSmokeTimer = 0;
+            for (var bi = 0; bi < threats.length; bi++) {
+              var bt = threats[bi];
+              if (bt.alive && bt.isBoss) {
+                var bpos = bt.position();
+                emitParticle(bpos.x + (Math.random() - 0.5) * bt.radius * 1.5, bpos.y + (Math.random() - 0.5) * bt.radius * 1.5,
+                  (Math.random() - 0.5) * 0.5, -0.8 - Math.random() * 0.5,
+                  0.8 + Math.random() * 0.4, 'smoke', 4 + Math.random() * 5);
+              }
+            }
+          }
+        }
+        // 更新道具
+        for (var i = powerUps.length - 1; i >= 0; i--) {
+          if (!powerUps[i].alive) { powerUps.splice(i, 1); continue; }
+          powerUps[i].update(dt);
+          if (!powerUps[i].alive) powerUps.splice(i, 1);
+        }
         for (var i = 0; i < threats.length; i++) {
           var t = threats[i];
           if (!t.alive) continue;
           if (t.update(dt) && Math.random() < 0.02 * dt) {
             t.alive = false; missed++; combo = 0;
             comboEl.textContent = '';
-            // 修复：调用落地爆炸效果
-            var pos = t.position();
-            emitFailExplosion(pos.x, pos.y);
+            // 护盾抵挡一次漏掉惩罚
+            if (shieldActive) {
+              shieldActive = false;
+              missed--;
+            } else {
+              // 修复：调用落地爆炸效果
+              var pos = t.position();
+              emitFailExplosion(pos.x, pos.y);
+            }
             if (missed >= CONFIG.missLimit) gameOver();
           }
         }
         threats = threats.filter(function(t) { return t.alive; });
         var rem = Math.max(0, CONFIG.gameDuration - gameTime);
         timerEl.textContent = '⏱️ ' + Math.ceil(rem) + 's';
+        // 关卡阶段显示
+        if (phaseEl) {
+          var phaseNum = Math.min(3, Math.floor(gameTime / CONFIG.phaseDuration) + 1);
+          var phaseNames = ['', '🟢 第一阶段', '🟡 第二阶段', '🔴 最终阶段'];
+          var phaseText = phaseNames[phaseNum] || '';
+          if (bossSpawned && !bossDefeated) phaseText += ' ⚠️ BOSS';
+          if (shieldActive) phaseText += ' 🛡️';
+          if (freezeActive) phaseText += ' ❄️';
+          phaseEl.textContent = phaseText;
+        }
         if (rem <= 0) gameOver();
       }
 
@@ -813,6 +1423,18 @@
         app.stage.position.set(screenShake.offsetX, screenShake.offsetY);
       }
 
+      // 更新星空
+      updateStars(dt);
+      // 更新拖尾粒子
+      updateTrailParticles(dt);
+      // 更新浮动文字
+      updateFloatingTexts(dt);
+      // 更新屏幕闪
+      if (screenFlashAlpha > 0) {
+        screenFlashAlpha -= dt / 60 * 4; // 250ms淡出
+        if (screenFlashAlpha < 0) screenFlashAlpha = 0;
+      }
+
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
@@ -822,15 +1444,31 @@
         ctx.translate(screenShake.offsetX, screenShake.offsetY);
       }
       drawBackground(ctx);
+      // 绘制拖尾粒子（在威胁下方）
+      drawTrailParticles(ctx);
       for (var i = 0; i < threats.length; i++) {
         if (threats[i].alive) threats[i].render(ctx);
+      }
+      // 渲染道具
+      for (var i = 0; i < powerUps.length; i++) {
+        if (powerUps[i].alive) powerUps[i].render(ctx);
+      }
+      // 绘制浮动文字
+      drawFloatingTexts(ctx);
+      // 绘制屏幕闪光
+      if (screenFlashAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = screenFlashAlpha;
+        ctx.fillStyle = screenFlashColor;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
       }
       ctx.restore();
 
       requestAnimationFrame(loop);
     }
 
-    setVersion('v5.4.2 - Shockwave');
+    setVersion('v5.6.1 - Score Fix');
     requestAnimationFrame(loop);
   })();
   </script>
