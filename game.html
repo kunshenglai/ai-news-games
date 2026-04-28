@@ -1469,6 +1469,12 @@
     }
 
     setVersion('v5.6.1 - Score Fix');
+    // Fallback: 特效函数在 PixiJS 未加载时的安全空实现
+    var _noop = function() {};
+    if (typeof emitPreset === 'undefined') { emitPreset = _noop; }
+    if (typeof emitBossExplosion === 'undefined') { emitBossExplosion = _noop; }
+    if (typeof emitFailExplosion === 'undefined') { emitFailExplosion = _noop; }
+    if (typeof emitEmptySpark === 'undefined') { emitEmptySpark = _noop; }
     requestAnimationFrame(loop);
   })();
   </script>
